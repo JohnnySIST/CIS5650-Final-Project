@@ -1,4 +1,6 @@
-import './style.css'
+import './style.css';
+import wosCompute from './shaders/wosCompute.wgsl/?raw';
+import wosRender from './shaders/wosRender.wgsl?raw';
 import { assert } from './utils/util';
 
 (async () => {
@@ -28,9 +30,6 @@ import { assert } from './utils/util';
   const canvas = document.querySelector<HTMLCanvasElement>('#canvas');
   assert(canvas !== null);
   
-  canvas.width = 800;
-  canvas.height = 600;
-  
   const context = canvas.getContext('webgpu') as GPUCanvasContext;
   const format = navigator.gpu.getPreferredCanvasFormat();
   context.configure({
@@ -38,57 +37,86 @@ import { assert } from './utils/util';
     format: format,
   });
 
+  // HELLO TRIANGLE BUFFERS / PIPELINE
+//   const vertexData = new Float32Array([
+//     0, 0.5,
+//     -0.5, -0.5,
+//     0.5, -0.5 
+//   ]);
+//   const vertexBuffer = device.createBuffer({
+//     size: vertexData.byteLength,
+//     usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+//   });
+//   device.queue.writeBuffer(vertexBuffer, 0, vertexData);
 
-  const vertexData = new Float32Array([
-    0, 0.5,      // top
-    -0.5, -0.5,  // bottom-left
-    0.5, -0.5    // bottom-right
-  ]);
-
-  const vertexBuffer = device.createBuffer({
-    size: vertexData.byteLength,
-    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-  });
-  
-  device.queue.writeBuffer(vertexBuffer, 0, vertexData);
-
-  const shaderModule = device.createShaderModule({
-    code: `
-      @vertex
-      fn vertMain(@location(0) pos : vec2f) ->
-          @builtin(position) vec4f {
-          return vec4f(pos, 0, 1);
-      }
-      
-      @fragment
-      fn fragMain() -> @location(0) vec4f {
-          return vec4f(1, 0, 0, 1);
-      }`
-  });
-
-  const pipeline = device.createRenderPipeline({
+  const renderPipeline = device.createRenderPipeline({
     layout: 'auto',
     vertex: {
-      module: shaderModule,
+      module: device.createShaderModule({
+        label: 'wos render vert',
+        code: wosRender,
+      }),
       entryPoint: 'vertMain',
-      buffers: [{
-        arrayStride: 8,  // 2 floats × 4 bytes
-        attributes: [{
-          shaderLocation: 0, 
-          offset: 0, 
-          format: 'float32x2'
-        }]
-      }],
     },
     fragment: {
-      module: shaderModule, 
+      module: device.createShaderModule({
+        label: 'wos render frag',
+        code: wosRender,
+      }),
       entryPoint: 'fragMain',
       targets: [{ format }],
     },
   });
 
-  function frame() {
+  // COMPUTE SHADER SETUP
+  const resultTexture = device.createTexture({
+    size: [canvas.width, canvas.height],
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.STORAGE_BINDING | 
+            GPUTextureUsage.TEXTURE_BINDING 
+  });
+
+  const sampler = device.createSampler({
+    magFilter: 'linear',
+    minFilter: 'linear',
+  });
+
+  const wgSize = 8;
+  const dispatchX = Math.ceil(canvas.width / wgSize);
+  const dispatchY = Math.ceil(canvas.height / wgSize);
+  const wos_pipeline = device.createComputePipeline({
+    label: 'wos compute',
+    layout: 'auto',
+    compute: {
+      module: device.createShaderModule({ code: wosCompute }),
+      entryPoint: 'main',
+    },
+  });
+
+  const wosBindGroup = device.createBindGroup({
+    label: 'wos texture bg',
+    layout: wos_pipeline.getBindGroupLayout(0),
+    entries: [{binding: 0, resource: resultTexture.createView() }]
+  });
+
+  // BIND GROUP FOR RENDERING TEXTURE IN FRAG
+  const renderBindGroup = device.createBindGroup({
+    label: 'wos result texture bg',
+    layout: renderPipeline.getBindGroupLayout(0),
+    entries: [ { binding: 0, resource: resultTexture.createView() },
+               { binding: 1, resource: sampler }]
+  });
+  
+
+  // THIS RENDERS STUFF :)
+   function frame() {
     const commandEncoder = device.createCommandEncoder();
+
+    const computePass = commandEncoder.beginComputePass();
+    computePass.setPipeline(wos_pipeline);
+    computePass.setBindGroup(0, wosBindGroup);
+    computePass.dispatchWorkgroups(dispatchX, dispatchY);
+    computePass.end();
 
     const passEncoder = commandEncoder.beginRenderPass({
       colorAttachments: [{
@@ -99,8 +127,9 @@ import { assert } from './utils/util';
       }]
     });
     
-    passEncoder.setPipeline(pipeline);
-    passEncoder.setVertexBuffer(0, vertexBuffer);
+    passEncoder.setPipeline(renderPipeline);
+    //passEncoder.setVertexBuffer(0, vertexBuffer);
+    passEncoder.setBindGroup(0, renderBindGroup);
     passEncoder.draw(3);
     passEncoder.end();
 
