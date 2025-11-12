@@ -30,6 +30,9 @@ import { assert } from './utils/util';
   const canvas = document.querySelector<HTMLCanvasElement>('#canvas');
   assert(canvas !== null);
   
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+    
   const context = canvas.getContext('webgpu') as GPUCanvasContext;
   const format = navigator.gpu.getPreferredCanvasFormat();
   context.configure({
@@ -99,6 +102,26 @@ import { assert } from './utils/util';
     entries: [{binding: 0, resource: resultTexture.createView() }]
   });
 
+  const idxBuffer = device.createBuffer({
+    label: 'idx buffer',
+    size: canvas.width * canvas.height * 4,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+  });
+
+  const uvBuffer = device.createBuffer({
+    label: 'uv buffer',
+    size: canvas.width * canvas.height * 8,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+  })
+
+  const uvBindGroup_compute = device.createBindGroup({
+    label: 'uv bg compute',
+    layout: wos_pipeline.getBindGroupLayout(1),
+    entries: [{binding: 0, resource: {buffer: idxBuffer}},
+              {binding: 1, resource: {buffer: uvBuffer}}
+    ]
+  });
+
   // BIND GROUP FOR RENDERING TEXTURE IN FRAG
   const renderBindGroup = device.createBindGroup({
     label: 'wos result texture bg',
@@ -106,7 +129,12 @@ import { assert } from './utils/util';
     entries: [ { binding: 0, resource: resultTexture.createView() },
                { binding: 1, resource: sampler }]
   });
-  
+
+  const uvBindGroup_frag = device.createBindGroup({
+    label: 'uv bg frag',
+    layout: renderPipeline.getBindGroupLayout(1),
+    entries: [{binding: 0, resource: {buffer: uvBuffer}}]
+  });
 
   // THIS RENDERS STUFF :)
    function frame() {
@@ -115,6 +143,7 @@ import { assert } from './utils/util';
     const computePass = commandEncoder.beginComputePass();
     computePass.setPipeline(wos_pipeline);
     computePass.setBindGroup(0, wosBindGroup);
+    computePass.setBindGroup(1, uvBindGroup_compute);
     computePass.dispatchWorkgroups(dispatchX, dispatchY);
     computePass.end();
 
@@ -130,6 +159,7 @@ import { assert } from './utils/util';
     passEncoder.setPipeline(renderPipeline);
     //passEncoder.setVertexBuffer(0, vertexBuffer);
     passEncoder.setBindGroup(0, renderBindGroup);
+    passEncoder.setBindGroup(1, uvBindGroup_frag);
     passEncoder.draw(3);
     passEncoder.end();
 
