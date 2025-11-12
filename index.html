@@ -4,7 +4,19 @@
     <title>WebGPU WoS</title>
 </head>
 <body>
-    <canvas id="canvas" />
-    <script type="module" src="scr/main.js"></script>
+    <div id="controls">
+    <button id="place-dip8-btn">Place DIP-8</button>
+    <button id="draw-trace-btn">Draw Trace</button>
+    <div id="trace-controls" style="display: inline-block; margin-left: 10px; vertical-align: middle;">
+        <label for="trace-width-slider">Trace Width:</label>
+        <input type="range" id="trace-width-slider" min="1" max="50" value="5" style="vertical-align: middle;">
+        <input type="number" id="trace-width-input" min="1" max="50" value="5" style="width: 50px; vertical-align: middle;">
+    </div>
+    <p>Click to place/add points. Press 'Esc' to finish drawing a trace.</p>
+    <button id="export-obj-btn">Export to OBJ</button>
+</div>
+
+    <canvas id="canvas"></canvas>
+    <script type="module" src="src/main.js"></script>
 </body>
 </html>
