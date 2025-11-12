@@ -3,33 +3,25 @@
     "target": "ES2020",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "lib": [
-      "ES2020",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["es2021", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
-    "allowJs": true,
-    /* Bundler mode */
+
+    /* bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "moduleDetection": "force",
     "noEmit": true,
-    /* Linting */
-    "strict": false,
+
+    /* linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
+
     /* types */
-    "typeRoots": [
-      "./node_modules/@webgpu/types",
-      "./node_modules/tweakpane/dist/type/"
-    ],
+    "types": ["@webgpu/types", "vite/client"],
   },
-  "include": [
-    "src/**/*.ts"
-  ],
-  "exclude": [
-    "**/node_modules/**",
-    "**/dist/**"
-  ]
+  "include": ["src"]
 }
