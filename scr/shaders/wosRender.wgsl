@@ -1,5 +1,4 @@
 @group(0) @binding(0) var computeTexture: texture_2d<f32>;
-@group(0) @binding(1) var texSampler: sampler;
 
 @group(1) @binding(0) var<storage, read> uv_list: array<vec2f>;
 
@@ -26,9 +25,10 @@ fn fragMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let index = u32(pos.y) * texSize.x + u32(pos.x);
     let wahoo = uv_list[index];
     let uv = wahoo;// pos.xy / vec2f(f32(texSize.x), f32(texSize.y));
-    let temp = textureSample(computeTexture, texSampler, uv).r;
-    if (temp <= 0.0) {
-        return vec4f(0.0, 0.0, 0.0, 1.0);
+    let pixelCoord = vec2i(uv * vec2f(f32(texSize.x), f32(texSize.y)));
+    let temp = textureLoad(computeTexture, pixelCoord, 0).r;
+    if (temp < 0) {
+        return vec4f(0, 0, 0, 1.0);
     } else {
         let outColor = twoToneColor(temp);//color(vec3f(0.5,0.5,0.5), vec3f(0.5, 0.5, 0.5), vec3f(1.0, 1.0, 1.0), vec3f(0.00, 0.33, 0.67), temp);
         return vec4f(outColor, 1.0);

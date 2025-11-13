@@ -1,6 +1,5 @@
 import './style.css';
-import wosCompute from './shaders/wosCompute.wgsl/?raw';
-import wosRender from './shaders/wosRender.wgsl?raw';
+import init from './renderers/renderer';
 import { assert } from './utils/util';
 
 (async () => {
@@ -29,145 +28,11 @@ import { assert } from './utils/util';
 
   const canvas = document.querySelector<HTMLCanvasElement>('#canvas');
   assert(canvas !== null);
-  
-    canvas.width = canvas.clientWidth;
-    canvas.height = canvas.clientHeight;
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
     
   const context = canvas.getContext('webgpu') as GPUCanvasContext;
-  const format = navigator.gpu.getPreferredCanvasFormat();
-  context.configure({
-    device,
-    format: format,
-  });
 
-  // HELLO TRIANGLE BUFFERS / PIPELINE
-//   const vertexData = new Float32Array([
-//     0, 0.5,
-//     -0.5, -0.5,
-//     0.5, -0.5 
-//   ]);
-//   const vertexBuffer = device.createBuffer({
-//     size: vertexData.byteLength,
-//     usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-//   });
-//   device.queue.writeBuffer(vertexBuffer, 0, vertexData);
-
-  const renderPipeline = device.createRenderPipeline({
-    layout: 'auto',
-    vertex: {
-      module: device.createShaderModule({
-        label: 'wos render vert',
-        code: wosRender,
-      }),
-      entryPoint: 'vertMain',
-    },
-    fragment: {
-      module: device.createShaderModule({
-        label: 'wos render frag',
-        code: wosRender,
-      }),
-      entryPoint: 'fragMain',
-      targets: [{ format }],
-    },
-  });
-
-  // COMPUTE SHADER SETUP
-  const resultTexture = device.createTexture({
-    size: [canvas.width, canvas.height],
-    format: 'rgba8unorm',
-    usage: GPUTextureUsage.STORAGE_BINDING | 
-            GPUTextureUsage.TEXTURE_BINDING 
-  });
-
-  const sampler = device.createSampler({
-    magFilter: 'linear',
-    minFilter: 'linear',
-  });
-
-  const wgSize = 8;
-  const dispatchX = Math.ceil(canvas.width / wgSize);
-  const dispatchY = Math.ceil(canvas.height / wgSize);
-  const wos_pipeline = device.createComputePipeline({
-    label: 'wos compute',
-    layout: 'auto',
-    compute: {
-      module: device.createShaderModule({ code: wosCompute }),
-      entryPoint: 'main',
-    },
-  });
-
-  const wosBindGroup = device.createBindGroup({
-    label: 'wos texture bg',
-    layout: wos_pipeline.getBindGroupLayout(0),
-    entries: [{binding: 0, resource: resultTexture.createView() }]
-  });
-
-  const idxBuffer = device.createBuffer({
-    label: 'idx buffer',
-    size: canvas.width * canvas.height * 4,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
-  });
-
-  const uvBuffer = device.createBuffer({
-    label: 'uv buffer',
-    size: canvas.width * canvas.height * 8,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
-  })
-
-  const uvBindGroup_compute = device.createBindGroup({
-    label: 'uv bg compute',
-    layout: wos_pipeline.getBindGroupLayout(1),
-    entries: [{binding: 0, resource: {buffer: idxBuffer}},
-              {binding: 1, resource: {buffer: uvBuffer}}
-    ]
-  });
-
-  // BIND GROUP FOR RENDERING TEXTURE IN FRAG
-  const renderBindGroup = device.createBindGroup({
-    label: 'wos result texture bg',
-    layout: renderPipeline.getBindGroupLayout(0),
-    entries: [ { binding: 0, resource: resultTexture.createView() },
-               { binding: 1, resource: sampler }]
-  });
-
-  const uvBindGroup_frag = device.createBindGroup({
-    label: 'uv bg frag',
-    layout: renderPipeline.getBindGroupLayout(1),
-    entries: [{binding: 0, resource: {buffer: uvBuffer}}]
-  });
-
-  // THIS RENDERS STUFF :)
-   function frame() {
-    const commandEncoder = device.createCommandEncoder();
-
-    const computePass = commandEncoder.beginComputePass();
-    computePass.setPipeline(wos_pipeline);
-    computePass.setBindGroup(0, wosBindGroup);
-    computePass.setBindGroup(1, uvBindGroup_compute);
-    computePass.dispatchWorkgroups(dispatchX, dispatchY);
-    computePass.end();
-
-    const passEncoder = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: context.getCurrentTexture().createView(),
-        loadOp: 'clear',
-        clearValue: [0.0, 0.0, 0.0, 1.0],
-        storeOp: 'store',
-      }]
-    });
-    
-    passEncoder.setPipeline(renderPipeline);
-    //passEncoder.setVertexBuffer(0, vertexBuffer);
-    passEncoder.setBindGroup(0, renderBindGroup);
-    passEncoder.setBindGroup(1, uvBindGroup_frag);
-    passEncoder.draw(3);
-    passEncoder.end();
-
-    device.queue.submit([commandEncoder.finish()]);
-    
-    requestAnimationFrame(frame);
-  }
-
-  requestAnimationFrame(frame);
+  init(canvas, context, device);
 
 })();

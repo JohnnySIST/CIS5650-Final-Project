@@ -1,6 +1,5 @@
-@group(0) @binding(0) var outputTex: texture_storage_2d<rgba8unorm, write>;
-@group(1) @binding(0) var<storage, read_write> index_list: array<u32>;
-@group(1) @binding(1) var<storage, read_write> uv_list: array<vec2f>;
+@group(0) @binding(0) var outputTex: texture_storage_2d<r32float, write>;
+@group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 
 fn distanceToBoundary(pos: vec2f, texSize: vec2u) -> f32 {
   let texSizef = vec2f(f32(texSize.x), f32(texSize.y));
@@ -94,27 +93,24 @@ fn walkOnSpheres(startPos: vec2f, texSize: vec2u, rngState: ptr<function, u32>) 
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) id: vec3u) {
-  let coords = vec2i(id.xy);
   let texSize = textureDimensions(outputTex);
-  
+  let index = id.y * texSize.x + id.x;
+  let uv = uv_list[index];//vec2f(f32(coords.x), f32(coords.y)) / vec2f(f32(texSize.x), f32(texSize.y));
+  let coords = vec2i(id.xy);
   if (u32(coords.x) >= texSize.x || u32(coords.y) >= texSize.y) {
     return;
   }
 
-  let index = id.y * texSize.x + id.x;
-  let uv = vec2f(f32(coords.x), f32(coords.y)) / vec2f(f32(texSize.x), f32(texSize.y));
-  
-  index_list[index] = index;
-  uv_list[index] = uv;
+  // IGNOR UVs FOR QUEERY POINTS NOT IN BOUNDARY
+  // CHANGE LATER SO THREADS NEVER RUN ON THESE TYPES OF POINTS (Stream Compaction :D)
+  if (uv.x < 0.0 || uv.y < 0.0) {
+    textureStore(outputTex, coords, vec4f(-1.0, 0, 0, 1.0));
+    return;
+  }
 
   let worldPos = vec2f(f32(coords.x), f32(coords.y));
   
   let dist = distanceToBoundary(worldPos, texSize);
-  
-  if (dist < 0.0) {
-    textureStore(outputTex, coords, vec4f(0, 0, 0, 1));
-    return;
-  }
   
   // Do multiple WoS walks and average
   let numWalks = 10u;
@@ -128,5 +124,5 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   
   let avgTemp = totalTemp / f32(numWalks);
   
-  textureStore(outputTex, coords, vec4f(avgTemp, avgTemp, avgTemp, 1));
+  textureStore(outputTex, coords, vec4f(avgTemp, 0, 0, 1.0));
 }
