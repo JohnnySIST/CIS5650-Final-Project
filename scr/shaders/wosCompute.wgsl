@@ -1,5 +1,6 @@
-@group(0) @binding(0) var outputTex: texture_storage_2d<r32float, write>;
+@group(0) @binding(0) var<uniform> domainDim: vec2u;
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
+@group(1) @binding(1) var<storage, read_write> wos_valueList: array<f32>;
 
 fn distanceToBoundary(pos: vec2f, texSize: vec2u) -> f32 {
   let texSizef = vec2f(f32(texSize.x), f32(texSize.y));
@@ -93,7 +94,7 @@ fn walkOnSpheres(startPos: vec2f, texSize: vec2u, rngState: ptr<function, u32>) 
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) id: vec3u) {
-  let texSize = textureDimensions(outputTex);
+  let texSize = domainDim;
   let index = id.y * texSize.x + id.x;
   let uv = uv_list[index];//vec2f(f32(coords.x), f32(coords.y)) / vec2f(f32(texSize.x), f32(texSize.y));
   let coords = vec2i(id.xy);
@@ -103,13 +104,9 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 
   // IGNOR UVs FOR QUEERY POINTS NOT IN BOUNDARY
   // CHANGE LATER SO THREADS NEVER RUN ON THESE TYPES OF POINTS (Stream Compaction :D)
-  // if (uv.x < 0.0 || uv.y < 0.0) {
-  //   textureStore(outputTex, coords, vec4f(-1.0, 0, 0, 1.0));
-  //   return;
-  // }
-
-  if (coords.x < 100 && coords.y < 100) {
-    textureStore(outputTex, coords, vec4f(-999.0, 0, 0, 0));
+  if (uv.x < 0.0 || uv.y < 0.0) {
+    wos_valueList[index] = -1.0;
+    //textureStore(outputTex, coords, vec4f(-1.0, 0, 0, 1.0));
     return;
   }
 
@@ -129,5 +126,6 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   
   let avgTemp = totalTemp / f32(numWalks);
   
-  textureStore(outputTex, coords, vec4f(avgTemp, 0, 0, 1.0));
+  wos_valueList[index] = avgTemp;
+  //textureStore(outputTex, coords, vec4f(avgTemp, 0, 0, 1.0));
 }

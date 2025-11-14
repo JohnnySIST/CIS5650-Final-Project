@@ -1,5 +1,6 @@
-@group(0) @binding(0) var computeTexture: texture_2d<f32>;
-@group(1) @binding(0) var<storage, read> uv_list: array<vec2f>;
+@group(0) @binding(0) var<uniform> domainDim: vec2u;
+@group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
+@group(1) @binding(1) var<storage, read_write> wos_valueList: array<f32>;
 
 @vertex
 fn vertMain(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f {
@@ -20,13 +21,12 @@ fn twoToneColor(t: f32) -> vec3f {
       
 @fragment
 fn fragMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    let texSize = textureDimensions(computeTexture);
+    let texSize = domainDim;
     let index = u32(pos.y) * texSize.x + u32(pos.x);
     let wahoo = uv_list[index];
     let uv = wahoo;// pos.xy / vec2f(f32(texSize.x), f32(texSize.y));
     let pixelCoord = vec2i(uv * vec2f(f32(texSize.x), f32(texSize.y)));
-    let temp = textureLoad(computeTexture, pixelCoord, 0).r;
-
+    let temp = wos_valueList[index];
     if (temp < 0.0) {
         return vec4f(0, 0, 0, 1.0);
     } else {
