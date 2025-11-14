@@ -22,18 +22,6 @@ export default async function init(
   //    UV PREPROCESS SETUP
   // =============================
 
-  // FOR SCREEN SIZE ETC...
-  const resultTexture = device.createTexture({
-    size: [canvas.width, canvas.height],
-    format: 'r32float',
-    usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING
-  });
-
-  const sampler = device.createSampler({
-    magFilter: 'nearest',
-    minFilter: 'nearest',
-  });
-
   const wgSize_Pre = 8;
   const dispatchX_Pre = Math.ceil(canvas.width / wgSize_Pre);
   const dispatchY_Pre = Math.ceil(canvas.height / wgSize_Pre);
@@ -46,10 +34,23 @@ export default async function init(
     },
   });
 
-  const uvPreTextureBindGroup = device.createBindGroup({
-    label: 'uv preprocess texture bg',
+  const domainSizeBuffer = device.createBuffer({
+    label: "Domain Size Buffer (uv pre)",
+    size: 8,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+
+  const domainDimData = new Uint32Array([
+    canvas.width,
+    canvas.height
+  ]);
+
+  device.queue.writeBuffer(domainSizeBuffer, 0, domainDimData);
+
+  const domainSizeBindGroup = device.createBindGroup({
+    label: 'domain size uvPre bg',
     layout: uvPre_Pipeline.getBindGroupLayout(0),
-    entries: [{binding: 0, resource: resultTexture.createView() }]
+    entries: [{binding: 0, resource: {buffer: domainSizeBuffer}}]
   });
 
   // THIS STORES UVs ON SCREEN FOR QUEERY POINTS
@@ -62,13 +63,24 @@ export default async function init(
   const uvBindGroup_uvPre = device.createBindGroup({
     label: 'uv bg compute',
     layout: uvPre_Pipeline.getBindGroupLayout(1),
-    entries: [{binding: 0, resource: {buffer: uvBuffer}}
-    ]
+    entries: [{binding: 0, resource: {buffer: uvBuffer}}]
   });
 
   // ===============================
   //    WOS COMPUTE SHADER SETUP
   // ===============================
+
+    // FOR SCREEN SIZE ETC...
+  const resultTexture = device.createTexture({
+    size: [canvas.width, canvas.height],
+    format: 'r32float',
+    usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING
+  });
+
+  const sampler = device.createSampler({
+    magFilter: 'nearest',
+    minFilter: 'nearest',
+  });
 
   const wgSize = 8;
   const dispatchX_wos = Math.ceil(canvas.width / wgSize);
@@ -139,7 +151,7 @@ export default async function init(
 
     const uvPreComputePass = commandEncoder.beginComputePass();
     uvPreComputePass.setPipeline(uvPre_Pipeline);
-    uvPreComputePass.setBindGroup(0, uvPreTextureBindGroup);
+    uvPreComputePass.setBindGroup(0, domainSizeBindGroup);
     uvPreComputePass.setBindGroup(1, uvBindGroup_uvPre);
     uvPreComputePass.dispatchWorkgroups(dispatchX_Pre, dispatchY_Pre);
     uvPreComputePass.end();
@@ -161,7 +173,6 @@ export default async function init(
     });
     
     passEncoder.setPipeline(renderPipeline);
-    //passEncoder.setVertexBuffer(0, vertexBuffer);
     passEncoder.setBindGroup(0, renderBindGroup);
     passEncoder.setBindGroup(1, uvBindGroup_frag);
     passEncoder.draw(3);

@@ -103,8 +103,13 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 
   // IGNOR UVs FOR QUEERY POINTS NOT IN BOUNDARY
   // CHANGE LATER SO THREADS NEVER RUN ON THESE TYPES OF POINTS (Stream Compaction :D)
-  if (uv.x < 0.0 || uv.y < 0.0) {
-    textureStore(outputTex, coords, vec4f(-1.0, 0, 0, 1.0));
+  // if (uv.x < 0.0 || uv.y < 0.0) {
+  //   textureStore(outputTex, coords, vec4f(-1.0, 0, 0, 1.0));
+  //   return;
+  // }
+
+  if (coords.x < 100 && coords.y < 100) {
+    textureStore(outputTex, coords, vec4f(-999.0, 0, 0, 0));
     return;
   }
 

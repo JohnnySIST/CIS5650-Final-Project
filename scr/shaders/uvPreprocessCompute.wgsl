@@ -1,6 +1,5 @@
-@group(0) @binding(0) var outputTex: texture_storage_2d<r32float, write>;
+@group(0) @binding(0) var<uniform> domainDim: vec2u;
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
-
 
 fn distanceToBoundary(pos: vec2f, texSize: vec2u) -> f32 {
   let texSizef = vec2f(f32(texSize.x), f32(texSize.y));
@@ -33,7 +32,7 @@ fn distanceToBoundary(pos: vec2f, texSize: vec2u) -> f32 {
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) id: vec3u) {
   let coords = vec2i(id.xy);
-  let texSize = textureDimensions(outputTex);
+  let texSize = domainDim;
   
   if (u32(coords.x) >= texSize.x || u32(coords.y) >= texSize.y) {
     return;
