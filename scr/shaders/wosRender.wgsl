@@ -1,4 +1,5 @@
 @group(0) @binding(0) var<uniform> domainDim: vec2u;
+@group(0) @binding(1) var<uniform> totalWalks: u32;
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 @group(1) @binding(1) var<storage, read_write> wos_valueList: array<f32>;
 
@@ -30,9 +31,8 @@ fn fragMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     if (temp < 0.0) {
         return vec4f(0, 0, 0, 1.0);
     } else {
-        let outColor = twoToneColor(temp);//color(vec3f(0.5,0.5,0.5), vec3f(0.5, 0.5, 0.5), vec3f(1.0, 1.0, 1.0), vec3f(0.00, 0.33, 0.67), temp);
+        let outColor = twoToneColor(temp / f32(totalWalks));//color(vec3f(0.5,0.5,0.5), vec3f(0.5, 0.5, 0.5), vec3f(1.0, 1.0, 1.0), vec3f(0.00, 0.33, 0.67), temp);
         return vec4f(outColor, 1.0);
     }
-
 }
 

@@ -47,7 +47,6 @@ export default async function init(
   ]);
 
   device.queue.writeBuffer(domainSizeBuffer, 0, domainDimData);
-
   
   const domainSizeBindGroup_uvPre = device.createBindGroup({
     label: 'domain size uvPre bg',
@@ -72,21 +71,6 @@ export default async function init(
   //    WOS COMPUTE SHADER SETUP
   // ===============================
 
-//   const resultTexture = device.createTexture({
-//     size: [canvas.width, canvas.height],
-//     format: 'r32float',
-//     usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING
-//   });
-//   const sampler = device.createSampler({
-//     magFilter: 'nearest',
-//     minFilter: 'nearest',
-//   });
-//   const wosTextureBindGroup = device.createBindGroup({
-//     label: 'wos texture bg',
-//     layout: wos_pipeline.getBindGroupLayout(0),
-//     entries: [{binding: 0, resource: resultTexture.createView() }]
-//   });
-
   const wgSize = 8;
   const dispatchX_wos = Math.ceil(canvas.width / wgSize);
   const dispatchY_wos = Math.ceil(canvas.height / wgSize);
@@ -99,10 +83,18 @@ export default async function init(
     },
   });
 
+  let totalWalks = 0;
+  const walkCountBuffer = device.createBuffer({
+    label: "Walk Count Buffer",
+    size: 4,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+
   const domainSizeBindGroup_wos = device.createBindGroup({
     label: 'domain size wos bg',
     layout: wos_pipeline.getBindGroupLayout(0),
-    entries: [{binding: 0, resource: {buffer: domainSizeBuffer}}]
+    entries: [{binding: 0, resource: {buffer: domainSizeBuffer}},
+              {binding: 1, resource: {buffer: walkCountBuffer}}]
   });
 
   const wosValuesBuffer = device.createBuffer({
@@ -117,6 +109,7 @@ export default async function init(
     entries: [{binding: 0, resource: {buffer: uvBuffer}},
               {binding: 1, resource: {buffer: wosValuesBuffer}}]
   });
+
 
   // ======================================
   //    OUTPUT VERT / FRAG FOR RENDERING
@@ -141,17 +134,11 @@ export default async function init(
     },
   }); 
 
-  // BIND GROUP FOR RENDERING TEXTURE IN FRAG
-//   const renderBindGroup = device.createBindGroup({
-//     label: 'wos result texture bg',
-//     layout: renderPipeline.getBindGroupLayout(0),
-//     entries: [ { binding: 0, resource: resultTexture.createView() } ]
-//   });
-
   const domainSizeBindGroup_frag = device.createBindGroup({
     label: 'domain size frag bg',
     layout: renderPipeline.getBindGroupLayout(0),
-    entries: [{binding: 0, resource: {buffer: domainSizeBuffer}}]
+    entries: [{binding: 0, resource: {buffer: domainSizeBuffer}},
+              {binding: 1, resource: {buffer: walkCountBuffer}}]
   });
 
   const uvBindGroup_frag = device.createBindGroup({
@@ -173,6 +160,13 @@ export default async function init(
     uvPreComputePass.setBindGroup(1, uvBindGroup_uvPre);
     uvPreComputePass.dispatchWorkgroups(dispatchX_Pre, dispatchY_Pre);
     uvPreComputePass.end();
+
+    totalWalks += 4;
+    device.queue.writeBuffer(
+        walkCountBuffer, 
+        0, 
+        new Uint32Array([totalWalks])
+    );
     
     const wosComputePass = commandEncoder.beginComputePass();
     wosComputePass.setPipeline(wos_pipeline);
@@ -189,7 +183,7 @@ export default async function init(
         storeOp: 'store',
       }]
     });
-    
+
     passEncoder.setPipeline(renderPipeline);
     passEncoder.setBindGroup(0, domainSizeBindGroup_frag);
     passEncoder.setBindGroup(1, uvBindGroup_frag);

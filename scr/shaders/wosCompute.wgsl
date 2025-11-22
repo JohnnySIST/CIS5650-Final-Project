@@ -1,4 +1,5 @@
 @group(0) @binding(0) var<uniform> domainDim: vec2u;
+@group(0) @binding(1) var<uniform> totalWalks: u32;
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 @group(1) @binding(1) var<storage, read_write> wos_valueList: array<f32>;
 
@@ -91,7 +92,6 @@ fn walkOnSpheres(startPos: vec2f, texSize: vec2u, rngState: ptr<function, u32>) 
   return getBoundaryTemperature(pos, texSize);
 }
 
-
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) id: vec3u) {
   let texSize = domainDim;
@@ -106,7 +106,6 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   // CHANGE LATER SO THREADS NEVER RUN ON THESE TYPES OF POINTS (Stream Compaction :D)
   if (uv.x < 0.0 || uv.y < 0.0) {
     wos_valueList[index] = -1.0;
-    //textureStore(outputTex, coords, vec4f(-1.0, 0, 0, 1.0));
     return;
   }
 
@@ -115,17 +114,16 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   let dist = distanceToBoundary(worldPos, texSize);
   
   // Do multiple WoS walks and average
-  let numWalks = 10u;
+  let numWalks = 4u;
   var totalTemp = 0.0;
-  var rngState = u32(coords.x) * 747796405u + u32(coords.y) * 2891336453u;
+  var rngState = u32(coords.x) * 747796405u + u32(coords.y) * 2891336453u * totalWalks;
   
   for (var i = 0u; i < numWalks; i++) {
     let temp = walkOnSpheres(worldPos, texSize, &rngState);
     totalTemp += temp;
   }
   
-  let avgTemp = totalTemp / f32(numWalks);
+  let avgTemp = totalTemp;// / f32(numWalks);
   
-  wos_valueList[index] = avgTemp;
-  //textureStore(outputTex, coords, vec4f(avgTemp, 0, 0, 1.0));
+  wos_valueList[index] += avgTemp;
 }
