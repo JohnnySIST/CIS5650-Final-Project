@@ -1,11 +1,21 @@
+struct Circle {
+    center: vec2f,
+    radius: f32,
+    boundary_value: f32 // ASSUME DIRCHLE BOUNDARY FOR NOW 
+}
+
+
 @group(0) @binding(0) var<uniform> domainDim: vec2u;
 @group(0) @binding(1) var<uniform> totalWalks: u32;
+@group(0) @binding(2) var<storage> circles: array<Circle>;
+
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 @group(1) @binding(1) var<storage, read_write> wos_valueList: array<f32>;
 
-fn distanceToBoundary(pos: vec2f, texSize: vec2u) -> f32 {
+fn distanceToBoundary(pos: vec2f, texSize: vec2u) -> vec2f {
   let texSizef = vec2f(f32(texSize.x), f32(texSize.y));
   
+  // REPLACE BOX WITH THE USER DEFINED BOUNDARY. IF NOTHING, MAKE IT SCREEN SIZE
   let boxMin = texSizef * 0.1;
   let boxMax = texSizef * 0.9;
 
@@ -13,56 +23,25 @@ fn distanceToBoundary(pos: vec2f, texSize: vec2u) -> f32 {
     min(pos.x - boxMin.x, boxMax.x - pos.x),
     min(pos.y - boxMin.y, boxMax.y - pos.y)
   );
-  
-  // Circle 1
-  var circleCenter = texSizef * 0.5;
-  circleCenter.y += 400.0;
-  let circleRadius = min(texSizef.x, texSizef.y) * 0.2;
-  let circleDist = length(pos - circleCenter) - circleRadius;
 
-  // Circle 2
-  var circleCenter2 = texSizef * 0.5;
-  circleCenter2.y -= 400.0;
-  circleCenter2.x -= 100.0;
-  let circleRadius2 = min(texSizef.x, texSizef.y) * 0.1;
-  let circleDist2 = length(pos - circleCenter2) - circleRadius2;  // FIX: use circleCenter2 and circleRadius2!
-  
-  let circleDistFinal = min(circleDist, circleDist2);
-  return min(boxDist, circleDistFinal);
-}
-
-fn getBoundaryTemperature(pos: vec2f, texSize: vec2u) -> f32 {
-  let texSizef = vec2f(f32(texSize.x), f32(texSize.y));
-  
-  // Circle 1
-  var circleCenter = texSizef * 0.5;
-  circleCenter.y += 400.0;
-  let circleRadius = min(texSizef.x, texSizef.y) * 0.2;
-
-  // Circle 2
-  var circleCenter2 = texSizef * 0.5;
-  circleCenter2.y -= 400.0;
-  circleCenter2.x -= 100.0;
-  let circleRadius2 = min(texSizef.x, texSizef.y) * 0.1;
-  
-  let distToCircle1 = abs(length(pos - circleCenter) - circleRadius);
-  let distToCircle2 = abs(length(pos - circleCenter2) - circleRadius2);
-
-  let circleDistFinal = min(distToCircle1, distToCircle2);
-
-  let boxMin = texSizef * 0.1;
-  let boxMax = texSizef * 0.9;
-  
-  let distToBox = min(
-    min(abs(pos.x - boxMin.x), abs(boxMax.x - pos.x)),
-    min(abs(pos.y - boxMin.y), abs(boxMax.y - pos.y))
-  );
-  
-  if (circleDistFinal < distToBox) {
-    return 1.0; // Circles are hot
-  } else {
-    return 0.0; // Box is cold
+  // FOR NOW DO CENTER POS IS DISTANCE FROM CENTER OF SCREEN
+  var circleDistFinal = length(pos - (texSizef * 0.5 + circles[0].center * texSizef * 0.5)) - circles[0].radius * length(texSizef) * 0.5;
+  var circlebValFinal = circles[0].boundary_value;
+  for (var i = 1u; i < arrayLength(&circles); i++) {
+    let curDist = length(pos - (texSizef * 0.5 + circles[i].center * texSizef * 0.5)) - circles[i].radius * length(texSizef) * 0.5;
+    if (curDist < circleDistFinal) {
+      circleDistFinal = curDist;
+      circlebValFinal = circles[i].boundary_value;
+    }
   }
+
+  var result = vec2f(circleDistFinal, circlebValFinal);
+  if (boxDist < circleDistFinal) {
+    result[0] = boxDist;
+    result[1] = 0.0;
+  }
+  
+  return result;
 }
 
 fn randomFloat(state: ptr<function, u32>) -> f32 {
@@ -74,22 +53,26 @@ fn randomFloat(state: ptr<function, u32>) -> f32 {
 
 fn walkOnSpheres(startPos: vec2f, texSize: vec2u, rngState: ptr<function, u32>) -> f32 {
   var pos = startPos;
-  let epsilon = 2.0; // Stop when within 2 pixels of boundary
+  var temp = 0.0;
+  let epsilon = 2.0;
   let maxSteps = 100;
   
   for (var step = 0; step < maxSteps; step++) {
-    let dist = distanceToBoundary(pos, texSize);
+    let boundaryResult = distanceToBoundary(pos, texSize);
+    let dist = boundaryResult[0];
+    temp = boundaryResult[1];
 
     if (dist < epsilon) {
-      return getBoundaryTemperature(pos, texSize);
+      return temp;
     }
 
     let angle = randomFloat(rngState) * 6.28318530718; 
     let offset = vec2f(cos(angle), sin(angle)) * dist * 0.99;
     pos += offset;
+    
   }
   
-  return getBoundaryTemperature(pos, texSize);
+  return temp;
 }
 
 @compute @workgroup_size(8, 8)
@@ -110,9 +93,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   }
 
   let worldPos = vec2f(f32(coords.x), f32(coords.y));
-  
-  let dist = distanceToBoundary(worldPos, texSize);
-  
+
   // Do multiple WoS walks and average
   let numWalks = 4u;
   var totalTemp = 0.0;

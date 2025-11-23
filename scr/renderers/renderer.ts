@@ -18,6 +18,54 @@ export default async function init(
     format: format,
   });
 
+  // BASIC GEOMETRY BUFFER (JUST CIRCLES FOR NOW)
+    const circles = [
+        // Large circles
+        { center: [0.0, 0.0], radius: 0.15, boundary_value: 1.0 },
+        { center: [-0.6, 0.4], radius: 0.15, boundary_value: 0.5 },
+        { center: [0.6, -0.4], radius: 0.18, boundary_value: 0.8 },
+        
+        // Medium circles
+        { center: [-0.7, -0.7], radius: 0.06, boundary_value: 0.3 },
+        { center: [0.7, 0.7], radius: 0.07, boundary_value: 0.7 },
+        { center: [0.3, 0.3], radius: 0.08, boundary_value: 0.9 },
+        { center: [-0.3, -0.5], radius: 0.03, boundary_value: 0.4 },
+        { center: [0.44, 0.04], radius: 0.05, boundary_value: 0.6 },
+        
+        // Small circles
+        { center: [-0.1, 0.64], radius: 0.08, boundary_value: 1.0 },
+        { center: [0.82, -0.7], radius: 0.07, boundary_value: 0.2 },
+        { center: [-0.44, -0.1], radius: 0.09, boundary_value: 0.5 },
+        { center: [0.16, -0.64], radius: 0.06, boundary_value: 0.8 },
+        { center: [-0.76, 0.84], radius: 0.085, boundary_value: 0.35 },
+        
+        // Tiny circles (details)
+        { center: [-0.16, -0.24], radius: 0.04, boundary_value: 0.65 },
+        { center: [0.36, 0.76], radius: 0.045, boundary_value: 0.95 },
+        { center: [0.64, 0.24], radius: 0.035, boundary_value: 0.45 },
+        { center: [-0.5, 0.16], radius: 0.05, boundary_value: 0.75 },
+        { center: [0.1, 0.84], radius: 0.038, boundary_value: 0.25 },
+        { center: [0.76, -0.16], radius: 0.042, boundary_value: 0.55 },
+        { center: [-0.64, -0.3], radius: 0.048, boundary_value: 0.85 },
+    ];
+
+  const circleData = new Float32Array(circles.length * 4); 
+  for (let i = 0; i < circles.length; i++) {
+    const offset = i * 4;
+    circleData[offset + 0] = circles[i].center[0];  // center.x
+    circleData[offset + 1] = circles[i].center[1];  // center.y
+    circleData[offset + 2] = circles[i].radius;
+    circleData[offset + 3] = circles[i].boundary_value;
+  }
+
+  const circleGeomBuffer = device.createBuffer({
+    label: 'circle geo buffer',
+    size: circles.length * 16,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+  })
+
+  device.queue.writeBuffer(circleGeomBuffer, 0, circleData);
+
   // =============================
   //    UV PREPROCESS SETUP
   // =============================
@@ -47,11 +95,15 @@ export default async function init(
   ]);
 
   device.queue.writeBuffer(domainSizeBuffer, 0, domainDimData);
+
+  // BIND GEOMETRY DATA
   
   const domainSizeBindGroup_uvPre = device.createBindGroup({
     label: 'domain size uvPre bg',
     layout: uvPre_Pipeline.getBindGroupLayout(0),
-    entries: [{binding: 0, resource: {buffer: domainSizeBuffer}}]
+    entries: [{binding: 0, resource: {buffer: domainSizeBuffer}},
+              {binding: 1, resource: {buffer: circleGeomBuffer}}
+    ]
   });
 
   // THIS STORES UVs ON SCREEN FOR QUEERY POINTS
@@ -94,7 +146,8 @@ export default async function init(
     label: 'domain size wos bg',
     layout: wos_pipeline.getBindGroupLayout(0),
     entries: [{binding: 0, resource: {buffer: domainSizeBuffer}},
-              {binding: 1, resource: {buffer: walkCountBuffer}}]
+              {binding: 1, resource: {buffer: walkCountBuffer}},
+              {binding: 2, resource: {buffer: circleGeomBuffer}}]
   });
 
   const wosValuesBuffer = device.createBuffer({
@@ -161,7 +214,8 @@ export default async function init(
     uvPreComputePass.dispatchWorkgroups(dispatchX_Pre, dispatchY_Pre);
     uvPreComputePass.end();
 
-    totalWalks += 4;
+    totalWalks += 4; // IF YOU UPDATE THIS, UPDATE NUMBER IN wosCompute AND wosRender
+
     device.queue.writeBuffer(
         walkCountBuffer, 
         0, 
