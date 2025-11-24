@@ -4,14 +4,22 @@ struct Circle {
     boundary_value: f32 // ASSUME DIRCHLE BOUNDARY FOR NOW 
 }
 
+struct SelectionBounds {
+    minX: f32,
+    minY: f32,
+    maxX: f32,
+    maxY: f32
+}
 
 @group(0) @binding(0) var<uniform> domainDim: vec2u;
 @group(0) @binding(1) var<uniform> totalWalks: u32;
 @group(0) @binding(2) var<storage> circles: array<Circle>;
-@group(0) @binding(3) var<uniform> cameraMatrixInv: mat4x4<f32>;
 
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 @group(1) @binding(1) var<storage, read_write> wos_valueList: array<f32>;
+
+@group(2) @binding(0) var<uniform> cameraMatrixInv: mat4x4<f32>;
+@group(2) @binding(1) var<uniform> selectionBounds: SelectionBounds;
 
 fn distanceToBoundary(pos: vec2f, texSize: vec2u) -> vec2f {
   let texSizef = vec2f(f32(texSize.x), f32(texSize.y));
@@ -90,6 +98,13 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   // CHANGE LATER SO THREADS NEVER RUN ON THESE TYPES OF POINTS (Stream Compaction :D)
   if (uv.x < 0.0 || uv.y < 0.0) {
     wos_valueList[index] = -1.0;
+    return;
+  }
+
+  // IGNORE UVS OUTSIDE SELECTION BOUNDS
+  if (f32(coords.x) < selectionBounds.minX || f32(coords.x) > selectionBounds.maxX ||
+      f32(coords.y) < selectionBounds.minY || f32(coords.y) > selectionBounds.maxY) {
+    wos_valueList[index] = 0.0;
     return;
   }
 
