@@ -26,13 +26,15 @@ Walk on Stars is an extension to the WoS algorithm to allow for a combination of
 
 ## Interacitivity
 
-- Camera movement
-- Simulation zone selection
+- Camera movement, zooming and panning
+- Simulation zone selection, allowing users to focus on a certain area, reducing unnecessary computing 
+- Live FPS display
+- Add probes to monitor the real-time value of a position
 - Modifying properties of geometries
   - Widths of segments
   - Radii of footprint pads/vias
 
-![Interactive Visualization demo](./Milestone_2/Interactive_Visualization.mp4)
+![Interactive Visualization demo](./Milestone_2/camera.gif)
 
 ## KiCad Integration
 
