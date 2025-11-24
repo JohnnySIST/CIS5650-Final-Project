@@ -1,6 +1,8 @@
 import "./style.css";
 import { assert } from "./utils/util";
 
+import { parseKicadPcb } from "kicadts";
+
 // =============================================================================
 // Shaders
 // =============================================================================
@@ -292,6 +294,60 @@ class PCBEditor {
     document.getElementById("export-obj-btn")?.addEventListener("click", () => {
       this.exportToObj();
     });
+
+    document
+      .getElementById("import-kicad-btn")
+      ?.addEventListener("click", () => {
+        document.getElementById("kicad-file-input")?.click();
+      });
+
+    document
+      .getElementById("kicad-file-input")
+      ?.addEventListener("change", async (e) => {
+        const target = e.target as HTMLInputElement;
+        if (target.files && target.files.length > 0) {
+          const file = target.files[0];
+          const content = await file.text();
+          const pcb = parseKicadPcb(content);
+          console.log("Parsed KiCad PCB file:", pcb);
+
+          const targetLayer = "B.Cu";
+
+          const footprintPads = pcb.footprints.flatMap((footprint) => {
+            return footprint.fpPads.map((pad) => {
+              pad.layers.layers.map((layer) => {
+                let escapedPattern = layer.replace(
+                  /[.*+?^${}()|[\]\\]/g,
+                  "\\$&"
+                );
+
+                // Replace wildcard characters with regex equivalents
+                let regexPattern = escapedPattern.replace(/\*/g, ".*");
+
+                // Anchor the regex to match the entire string (optional, but often desired)
+                return new RegExp(`^${regexPattern}$`);
+              });
+            });
+            // return footprint.fpPads.filter((pad) => {
+            //   return pad.layers.layers.some((layer) => {
+            //     let escapedPattern = layer.replace(
+            //       /[.*+?^${}()|[\]\\]/g,
+            //       "\\$&"
+            //     );
+
+            //     // Replace wildcard characters with regex equivalents
+            //     let regexPattern = escapedPattern.replace(/\*/g, ".*");
+
+            //     // Anchor the regex to match the entire string (optional, but often desired)
+            //     return new RegExp(`^${regexPattern}$`).test(targetLayer);
+            //     return layer === targetLayer || layer === "*.Cu";
+            //   });
+            // });
+          });
+
+          console.log("Found pads:", footprintPads);
+        }
+      });
   }
 
   private render() {

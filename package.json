@@ -19,6 +19,7 @@
     "@loaders.gl/core": "^4.2.2",
     "@loaders.gl/ply": "^4.2.2",
     "@petamoriken/float16": "^3.8.7",
+    "kicadts": "^0.0.22",
     "tweakpane": "^3.1.8",
     "tweakpane-plugin-file-import": "^0.2.0",
     "wgpu-matrix": "^3.2.0"
