@@ -8,14 +8,15 @@ export class Camera2D {
   renderer: { updateCameraBuffer: () => void; getCanvasSize?: () => { width: number, height: number } } | null = null;
   selectionStart: number[] | null = null;
   selectionEnd: number[] | null = null;
-
-  constructor() {}
+  private uiCanvas: HTMLCanvasElement | null = null;
 
   setRenderer(renderer: { updateCameraBuffer: () => void }) {
     this.renderer = renderer;
   }
 
-  init(dom: HTMLElement) {
+  constructor() {}
+  init(dom: HTMLElement, uiCanvas?: HTMLCanvasElement) {
+    this.uiCanvas = uiCanvas ?? null;
     dom.addEventListener('mousedown', (e) => {
       this.lastX = e.clientX;
       this.lastY = e.clientY;
@@ -31,6 +32,7 @@ export class Camera2D {
           (mouseY - this.position[1]) / this.scale
         ];
         this.selectionEnd = [...this.selectionStart];
+        this.drawSelectionBox();
       }
     });
     window.addEventListener('mousemove', (e) => {
@@ -48,6 +50,7 @@ export class Camera2D {
           (mouseX - this.position[0]) / this.scale,
           (mouseY - this.position[1]) / this.scale
         ];
+        this.drawSelectionBox();
       }
     });
     window.addEventListener('mouseup', (e) => {
@@ -66,6 +69,7 @@ export class Camera2D {
           }
           this.renderer?.updateCameraBuffer();
         }
+        this.clearSelectionBox();
       }
     });
     dom.addEventListener('wheel', (e) => {
@@ -78,6 +82,32 @@ export class Camera2D {
     dom.addEventListener('contextmenu', (e) => {
       e.preventDefault();
     });
+  }
+
+  private drawSelectionBox() {
+    if (!this.uiCanvas) return;
+    const ctx = this.uiCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, this.uiCanvas.width, this.uiCanvas.height);
+    if (this.selectionStart && this.selectionEnd) {
+      const x1 = this.selectionStart[0] * this.scale + this.position[0];
+      const y1 = this.selectionStart[1] * this.scale + this.position[1];
+      const x2 = this.selectionEnd[0] * this.scale + this.position[0];
+      const y2 = this.selectionEnd[1] * this.scale + this.position[1];
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0,128,255,0.6)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+      ctx.restore();
+    }
+  }
+
+  clearSelectionBox() {
+    if (!this.uiCanvas) return;
+    const ctx = this.uiCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, this.uiCanvas.width, this.uiCanvas.height);
   }
 
   translate(dx: number, dy: number) {

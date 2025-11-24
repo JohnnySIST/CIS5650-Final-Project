@@ -27,15 +27,18 @@ import { Camera2D } from './ui/camera';
      },
   });
 
-  const canvas = document.querySelector<HTMLCanvasElement>('#canvas');
-  assert(canvas !== null);
+  const canvas = document.querySelector<HTMLCanvasElement>('#webgpu-canvas');
+  const uiCanvas = document.querySelector<HTMLCanvasElement>('#ui-canvas');
+  assert(canvas !== null && uiCanvas !== null);
   canvas.width = canvas.clientWidth;
   canvas.height = canvas.clientHeight;
-    
+  uiCanvas.width = canvas.width;
+  uiCanvas.height = canvas.height;
+
   const context = canvas.getContext('webgpu') as GPUCanvasContext;
 
   const camera = new Camera2D();
-  camera.init(canvas);
+  camera.init(canvas, uiCanvas);
 
   init(canvas, context, device, camera);
 
