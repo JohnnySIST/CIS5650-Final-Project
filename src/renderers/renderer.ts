@@ -100,17 +100,23 @@ export class Renderer {
   constructor(
     canvas: HTMLCanvasElement,
     context: GPUCanvasContext,
-    device: GPUDevice
+    device: GPUDevice,
+    simRes: [number, number] = [canvas.width, canvas.height],
+    simTL: [number, number] = [-0.9, -0.9],
+    simSize: [number, number] = [1.8, 1.8],
+    viewRes: [number, number] = [canvas.width, canvas.height],
+    viewTL: [number, number] = [-1, -1],
+    viewSize: [number, number] = [2, 2]
   ) {
     this.canvas = canvas;
     this.context = context;
     this.device = device;
-    this.simRes = [canvas.width, canvas.height];
-    this.simTL = [-0.9, -0.9];
-    this.simSize = [1.8, 1.8];
-    this.viewRes = [canvas.width, canvas.height];
-    this.viewTL = [-1, -1];
-    this.viewSize = [2, 2]; // TODO: FEED IN FROM UI
+    this.simRes = simRes;
+    this.simTL = simTL;
+    this.simSize = simSize;
+    this.viewRes = viewRes;
+    this.viewTL = viewTL;
+    this.viewSize = viewSize;
     this.init();
   }
 
@@ -123,6 +129,58 @@ export class Renderer {
     });
 
     this.setCircles();
+  }
+
+  async updateParams({
+    simRes,
+    simTL,
+    simSize,
+    viewRes,
+    viewTL,
+    viewSize,
+  }: {
+    simRes?: [number, number];
+    simTL?: [number, number];
+    simSize?: [number, number];
+    viewRes?: [number, number];
+    viewTL?: [number, number];
+    viewSize?: [number, number];
+  }) {
+    const device = this.device;
+    const canvas = this.canvas;
+    if (simRes) {
+      this.simRes = simRes;
+      const simResData = new Uint32Array([this.simRes[0], this.simRes[1]]);
+      device.queue.writeBuffer(this.simResBuffer, 0, simResData);
+    }
+    if (simTL) {
+      this.simTL = simTL;
+      const simTLData = new Float32Array([this.simTL[0], this.simTL[1]]);
+      device.queue.writeBuffer(this.simTLBuffer, 0, simTLData);
+    }
+    if (simSize) {
+      this.simSize = simSize;
+      const simSizeData = new Float32Array([this.simSize[0], this.simSize[1]]);
+      device.queue.writeBuffer(this.simSizeBuffer, 0, simSizeData);
+    }
+    if (viewRes) {
+      this.viewRes = viewRes;
+      const viewResData = new Uint32Array([this.viewRes[0], this.viewRes[1]]);
+      device.queue.writeBuffer(this.viewResBuffer, 0, viewResData);
+    }
+    if (viewTL) {
+      this.viewTL = viewTL;
+      const viewTLData = new Float32Array([this.viewTL[0], this.viewTL[1]]);
+      device.queue.writeBuffer(this.viewTLBuffer, 0, viewTLData);
+    }
+    if (viewSize) {
+      this.viewSize = viewSize;
+      const viewSizeData = new Float32Array([
+        this.viewSize[0],
+        this.viewSize[1],
+      ]);
+      device.queue.writeBuffer(this.viewSizeBuffer, 0, viewSizeData);
+    }
   }
 
   async setCircles(circles: Circle[] = example_circles) {

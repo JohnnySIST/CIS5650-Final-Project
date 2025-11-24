@@ -22,8 +22,6 @@ function makeRegexFromWildcardString(str: string): RegExp {
 
 class EditorState {
   public mode: EditorMode = "select";
-  public pan: Vec2 = { x: 0, y: 0 }; // board coordinates
-  public zoom: number = 1.0; // scale factor
   public isPanning: boolean = false;
 }
 
@@ -33,8 +31,40 @@ class PCBEditor {
 
   private pcbDesign: KicadPcb | null = null;
 
-  constructor(canvas: HTMLCanvasElement) {
+  private renderer: Renderer;
+
+  private simRes: [number, number]; // integers, pixels
+  private simTL: [number, number]; // floats, world space
+  private simSize: [number, number]; // floats, world space
+
+  private viewRes: [number, number]; // integers, pixels
+  private viewTL: [number, number]; // floats, world space
+  private viewSize: [number, number]; // floats, world space
+
+  constructor(
+    canvas: HTMLCanvasElement,
+    context: GPUCanvasContext,
+    device: GPUDevice
+  ) {
     this.canvas = canvas;
+    this.simRes = [canvas.width, canvas.height];
+    this.simTL = [-0.9, -0.9];
+    this.simSize = [1.8, 1.8];
+    this.viewRes = [canvas.width, canvas.height];
+    this.viewTL = [-1, -1];
+    this.viewSize = [2, 2];
+
+    this.renderer = new Renderer(
+      canvas,
+      context,
+      device,
+      this.simRes,
+      this.simTL,
+      this.simSize,
+      this.viewRes,
+      this.viewTL,
+      this.viewSize
+    );
     this.init();
   }
 
@@ -45,16 +75,14 @@ class PCBEditor {
 
   private getMouseWorldPosition(e: MouseEvent): Vec2 {
     const rect = this.canvas.getBoundingClientRect();
-    const scaleX = this.canvas.width / rect.width;
-    const scaleY = this.canvas.height / rect.height;
 
-    // 1. Get mouse position in canvas pixel coordinates
-    const canvasX = (e.clientX - rect.left) * scaleX;
-    const canvasY = (e.clientY - rect.top) * scaleY;
+    // 1. Get mouse position in canvas uv coordinates
+    const canvasU = (e.clientX - rect.left) / rect.width;
+    const canvasV = (e.clientY - rect.top) / rect.height;
 
     // 2. Convert from canvas coordinates to world coordinates
-    const worldX = (canvasX - this.state.pan.x) / this.state.zoom;
-    const worldY = (canvasY - this.state.pan.y) / this.state.zoom;
+    const worldX = canvasU * this.viewSize[0] + this.viewTL[0];
+    const worldY = canvasV * this.viewSize[1] + this.viewTL[1];
 
     return { x: worldX, y: worldY };
   }
@@ -81,12 +109,11 @@ class PCBEditor {
         // We need to scale the movement by the canvas's CSS vs internal resolution
         // to ensure 1:1 panning at any display size.
         const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
 
-        this.state.pan.x += e.movementX * scaleX;
-        this.state.pan.y += e.movementY * scaleY;
-        // this.render();
+        this.viewTL[0] -= (e.movementX / rect.width) * this.viewSize[0];
+        this.viewTL[1] -= (e.movementY / rect.height) * this.viewSize[1];
+
+        this.renderer.updateParams({ viewTL: this.viewTL });
       }
     });
 
@@ -96,28 +123,33 @@ class PCBEditor {
       const worldPosBeforeZoom = this.getMouseWorldPosition(e);
 
       const zoomFactor = 1.1;
-      const oldZoom = this.state.zoom;
-      this.state.zoom *= e.deltaY < 0 ? zoomFactor : 1 / zoomFactor;
-      this.state.zoom = Math.max(0.1, Math.min(this.state.zoom, 10)); // Clamp zoom
+      const oldZoom = this.viewSize[0];
+      const zoomInOutFactor = e.deltaY > 0 ? zoomFactor : 1 / zoomFactor;
+      this.viewSize[0] *= zoomInOutFactor;
+      this.viewSize[1] *= zoomInOutFactor;
+      this.viewSize[0] = Math.max(0.1, Math.min(this.viewSize[0], 10)); // Clamp zoom
+      this.viewSize[1] = Math.max(0.1, Math.min(this.viewSize[1], 10)); // Clamp zoom
 
       const worldPosAfterZoom = this.getMouseWorldPosition(e);
 
       // Calculate the world space difference and scale it by the new zoom to get the screen space pan adjustment
-      const dx = (worldPosAfterZoom.x - worldPosBeforeZoom.x) * this.state.zoom;
-      const dy = (worldPosAfterZoom.y - worldPosBeforeZoom.y) * this.state.zoom;
+      const dx = worldPosAfterZoom.x - worldPosBeforeZoom.x;
+      const dy = worldPosAfterZoom.y - worldPosBeforeZoom.y;
 
       // Apply the adjustment to the pan
-      this.state.pan.x += dx;
-      this.state.pan.y += dy;
+      this.viewTL[0] -= dx;
+      this.viewTL[1] -= dy;
 
-      // this.render();
+      this.renderer.updateParams({
+        viewTL: this.viewTL,
+        viewSize: this.viewSize,
+      });
     });
 
     this.canvas.addEventListener("click", (e) => {
       const clickPos = this.getMouseWorldPosition(e);
       switch (this.state.mode) {
       }
-      // this.render();
     });
 
     window.addEventListener("keydown", (e) => {
@@ -225,9 +257,7 @@ async function main() {
 
   const context = canvas.getContext("webgpu") as GPUCanvasContext;
 
-  new PCBEditor(canvas);
-
-  new Renderer(canvas, context, device);
+  const editor = new PCBEditor(canvas, context, device);
 
   console.log("Main function completed");
 }
