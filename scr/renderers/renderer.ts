@@ -47,7 +47,101 @@ export default async function init(
         { center: [0.1, 0.84], radius: 0.038, boundary_value: 0.25 },
         { center: [0.76, -0.16], radius: 0.042, boundary_value: 0.55 },
         { center: [-0.64, -0.3], radius: 0.048, boundary_value: 0.85 },
+        
+        // Additional medium circles (new)
+        { center: [-0.85, 0.0], radius: 0.08, boundary_value: 0.42 },
+        { center: [0.85, 0.15], radius: 0.09, boundary_value: 0.68 },
+        { center: [0.0, -0.75], radius: 0.07, boundary_value: 0.52 },
+        { center: [-0.3, 0.85], radius: 0.06, boundary_value: 0.78 },
+        { center: [0.5, 0.6], radius: 0.065, boundary_value: 0.33 },
+        
+        // Additional small circles (new)
+        { center: [-0.9, -0.4], radius: 0.05, boundary_value: 0.61 },
+        { center: [0.9, -0.25], radius: 0.048, boundary_value: 0.47 },
+        { center: [-0.25, -0.85], radius: 0.052, boundary_value: 0.71 },
+        { center: [0.38, -0.85], radius: 0.046, boundary_value: 0.39 },
+        { center: [-0.82, 0.55], radius: 0.055, boundary_value: 0.88 },
+        
+        // Additional tiny circles (new)
+        { center: [0.22, 0.52], radius: 0.035, boundary_value: 0.44 },
+        { center: [-0.38, 0.62], radius: 0.032, boundary_value: 0.66 },
+        { center: [0.52, -0.12], radius: 0.038, boundary_value: 0.54 },
+        { center: [-0.12, 0.36], radius: 0.03, boundary_value: 0.82 },
+        { center: [0.18, -0.32], radius: 0.034, boundary_value: 0.37 },
     ];
+
+    // const circles = [
+    //     // Center large circle
+    //     { center: [0.0, 0.0], radius: 0.18, boundary_value: 1.0 },
+        
+    //     // First ring - 6 circles around center
+    //     { center: [0.55, 0.0], radius: 0.11, boundary_value: 0.9 },
+    //     { center: [-0.55, 0.0], radius: 0.11, boundary_value: 0.9 },
+    //     { center: [0.275, 0.476], radius: 0.11, boundary_value: 0.9 },
+    //     { center: [-0.275, 0.476], radius: 0.11, boundary_value: 0.9 },
+    //     { center: [0.275, -0.476], radius: 0.11, boundary_value: 0.9 },
+    //     { center: [-0.275, -0.476], radius: 0.11, boundary_value: 0.9 },
+        
+    //     // Second ring - 12 circles in gaps
+    //     { center: [0.74, 0.0], radius: 0.08, boundary_value: 0.7 },
+    //     { center: [-0.74, 0.0], radius: 0.08, boundary_value: 0.7 },
+    //     { center: [0.37, 0.64], radius: 0.08, boundary_value: 0.7 },
+    //     { center: [-0.37, 0.64], radius: 0.08, boundary_value: 0.7 },
+    //     { center: [0.37, -0.64], radius: 0.08, boundary_value: 0.7 },
+    //     { center: [-0.37, -0.64], radius: 0.08, boundary_value: 0.7 },
+    //     { center: [0.63, 0.36], radius: 0.08, boundary_value: 0.7 },
+    //     { center: [-0.63, 0.36], radius: 0.08, boundary_value: 0.7 },
+    //     { center: [0.63, -0.36], radius: 0.08, boundary_value: 0.7 },
+    //     { center: [-0.63, -0.36], radius: 0.08, boundary_value: 0.7 },
+    //     { center: [0.0, 0.73], radius: 0.08, boundary_value: 0.7 },
+    //     { center: [0.0, -0.73], radius: 0.08, boundary_value: 0.7 },
+        
+    //     // Third ring - 18 smaller circles
+    //     { center: [0.85, 0.0], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [-0.85, 0.0], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [0.425, 0.736], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [-0.425, 0.736], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [0.425, -0.736], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [-0.425, -0.736], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [0.76, 0.22], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [-0.76, 0.22], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [0.76, -0.22], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [-0.76, -0.22], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [0.54, 0.54], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [-0.54, 0.54], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [0.54, -0.54], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [-0.54, -0.54], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [0.22, 0.76], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [-0.22, 0.76], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [0.22, -0.76], radius: 0.045, boundary_value: 0.5 },
+    //     { center: [-0.22, -0.76], radius: 0.045, boundary_value: 0.5 },
+        
+    //     // Fourth ring - 24 tiny circles at corners
+    //     { center: [0.88, 0.12], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [-0.88, 0.12], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [0.88, -0.12], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [-0.88, -0.12], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [0.68, 0.48], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [-0.68, 0.48], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [0.68, -0.48], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [-0.68, -0.48], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [0.48, 0.68], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [-0.48, 0.68], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [0.48, -0.68], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [-0.48, -0.68], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [0.12, 0.88], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [-0.12, 0.88], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [0.12, -0.88], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [-0.12, -0.88], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [0.65, 0.18], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [-0.65, 0.18], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [0.65, -0.18], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [-0.65, -0.18], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [0.18, 0.65], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [-0.18, 0.65], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [0.18, -0.65], radius: 0.025, boundary_value: 0.3 },
+    //     { center: [-0.18, -0.65], radius: 0.025, boundary_value: 0.3 },
+    // ];
 
   const circleData = new Float32Array(circles.length * 4); 
   for (let i = 0; i < circles.length; i++) {
