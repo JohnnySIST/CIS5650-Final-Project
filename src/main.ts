@@ -48,11 +48,11 @@ class PCBEditor {
   ) {
     this.canvas = canvas;
     this.simRes = [canvas.width, canvas.height];
-    this.simTL = [-0.9, -0.9];
-    this.simSize = [1.8, 1.8];
+    this.simTL = [0, 0];
+    this.simSize = [200, 200];
     this.viewRes = [canvas.width, canvas.height];
-    this.viewTL = [-1, -1];
-    this.viewSize = [2, 2];
+    this.viewTL = [0, 0];
+    this.viewSize = [200, 200];
 
     this.renderer = new Renderer(
       canvas,
@@ -127,8 +127,16 @@ class PCBEditor {
       const zoomInOutFactor = e.deltaY > 0 ? zoomFactor : 1 / zoomFactor;
       this.viewSize[0] *= zoomInOutFactor;
       this.viewSize[1] *= zoomInOutFactor;
-      this.viewSize[0] = Math.max(0.1, Math.min(this.viewSize[0], 10)); // Clamp zoom
-      this.viewSize[1] = Math.max(0.1, Math.min(this.viewSize[1], 10)); // Clamp zoom
+      const zoomMinClamp = 0.1;
+      const zoomMaxClamp = 10;
+      this.viewSize[0] = Math.max(
+        zoomMinClamp,
+        Math.min(this.viewSize[0], zoomMaxClamp)
+      );
+      this.viewSize[1] = Math.max(
+        zoomMinClamp,
+        Math.min(this.viewSize[1], zoomMaxClamp)
+      );
 
       const worldPosAfterZoom = this.getMouseWorldPosition(e);
 
@@ -177,22 +185,51 @@ class PCBEditor {
 
           const targetLayer = "B.Cu";
 
-          const footprintPads = pcb.footprints.flatMap((footprint) => {
-            return footprint.fpPads.filter((pad) => {
-              return pad.layers.layers.some((layer) => {
-                return makeRegexFromWildcardString(layer).test(targetLayer);
+          // const footprintPads = pcb.footprints.flatMap((footprint) => {
+          //   return footprint.fpPads.filter((pad) => {
+          //     return pad.layers.layers.some((layer) => {
+          //       return makeRegexFromWildcardString(layer).test(targetLayer);
+          //     });
+          //   });
+          // });
+
+          // const segments = pcb.segments.filter((segment) => {
+          //   return segment.layer.names.some((layer) => {
+          //     return makeRegexFromWildcardString(layer).test(targetLayer);
+          //   });
+          // });
+
+          // console.log("Found pads:", footprintPads);
+          // console.log("Found segments:", segments);
+
+          const drawAbleFootprintPads = pcb.footprints.flatMap((footprint) => {
+            return footprint.fpPads
+              .filter((pad) => {
+                return (
+                  pad.shape === "circle" &&
+                  pad.layers.layers.some((layer) => {
+                    return makeRegexFromWildcardString(layer).test(targetLayer);
+                  })
+                );
+              })
+              .map((pad) => {
+                return {
+                  x: footprint.position.x + pad.at.x,
+                  y: footprint.position.y + pad.at.y,
+                  radius: pad.size.height / 2,
+                };
               });
-            });
           });
 
-          const segments = pcb.segments.filter((segment) => {
-            return segment.layer.names.some((layer) => {
-              return makeRegexFromWildcardString(layer).test(targetLayer);
-            });
-          });
-
-          console.log("Found pads:", footprintPads);
-          console.log("Found segments:", segments);
+          this.renderer.setCircles(
+            drawAbleFootprintPads.map((pad) => {
+              return {
+                center: [pad.x, pad.y],
+                radius: pad.radius,
+                boundary_value: Math.random(),
+              };
+            })
+          );
         }
       });
 

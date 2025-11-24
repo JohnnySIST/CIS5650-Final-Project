@@ -97,6 +97,8 @@ export class Renderer {
   private viewTL: [number, number]; // floats, world space
   private viewSize: [number, number]; // floats, world space
 
+  private simUpdateId: number = 0;
+
   constructor(
     canvas: HTMLCanvasElement,
     context: GPUCanvasContext,
@@ -184,6 +186,7 @@ export class Renderer {
   }
 
   async setCircles(circles: Circle[] = example_circles) {
+    this.simUpdateId += 1;
     const canvas = this.canvas;
     const context = this.context;
     const device = this.device;
@@ -406,10 +409,13 @@ export class Renderer {
     //    THIS RENDERS STUFF :)
     // ===============================
 
-    requestAnimationFrame(() => this.frame());
+    requestAnimationFrame(() => this.frame(this.simUpdateId));
   }
 
-  private frame() {
+  private frame(simUpdateId: number) {
+    if (simUpdateId !== this.simUpdateId) {
+      return;
+    }
     const canvas = this.canvas;
     const context = this.context;
     const device = this.device;
@@ -463,6 +469,6 @@ export class Renderer {
 
     device.queue.submit([commandEncoder.finish()]);
 
-    requestAnimationFrame(() => this.frame());
+    requestAnimationFrame(() => this.frame(simUpdateId));
   }
 }
