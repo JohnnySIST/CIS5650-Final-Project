@@ -7,6 +7,12 @@ export interface Circle {
   radius: number;
   boundary_value: number;
 }
+export interface Segment {
+  start: [number, number];
+  end: [number, number];
+  widthRadius: number;
+  boundary_value: number;
+}
 
 const example_circles: Circle[] = [
   // Large circles
@@ -59,6 +65,11 @@ const example_circles: Circle[] = [
   { center: [0.18, -0.32], radius: 0.034, boundary_value: 0.37 },
 ];
 
+const example_segments: Segment[] = [
+  { start: [-1, -1], end: [1, 1], widthRadius: 0.05, boundary_value: 0.5 },
+  { start: [1, -1], end: [-1, 1], widthRadius: 0.05, boundary_value: 0.5 },
+];
+
 export class Renderer {
   private format: GPUTextureFormat;
   private canvas: HTMLCanvasElement;
@@ -75,6 +86,7 @@ export class Renderer {
   private walkCountBuffer: GPUBuffer;
   private wosValuesBuffer: GPUBuffer;
   private uvBuffer: GPUBuffer;
+  private segmentGeomBuffer: GPUBuffer;
 
   private uvBindGroup_compute: GPUBindGroup;
   private domainSizeBindGroup_frag: GPUBindGroup;
@@ -185,11 +197,15 @@ export class Renderer {
     }
   }
 
-  async setCircles(circles: Circle[] = example_circles) {
+  async setCircles(
+    circles: Circle[] = example_circles,
+    segments: Segment[] = example_segments
+  ) {
     this.simUpdateId += 1;
     const canvas = this.canvas;
     const context = this.context;
     const device = this.device;
+
     const circleData = new Float32Array(circles.length * 4);
     for (let i = 0; i < circles.length; i++) {
       const offset = i * 4;
@@ -201,11 +217,30 @@ export class Renderer {
 
     this.circleGeomBuffer = device.createBuffer({
       label: "circle geo buffer",
-      size: circles.length * 16,
+      size: circles.length * 4 * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
     device.queue.writeBuffer(this.circleGeomBuffer, 0, circleData);
+
+    const segmentData = new Float32Array(segments.length * 6);
+    for (let i = 0; i < segments.length; i++) {
+      const offset = i * 6;
+      segmentData[offset + 0] = segments[i].start[0]; // start.x
+      segmentData[offset + 1] = segments[i].start[1]; // start.y
+      segmentData[offset + 2] = segments[i].end[0]; // end.x
+      segmentData[offset + 3] = segments[i].end[1]; // end.y
+      segmentData[offset + 4] = segments[i].widthRadius;
+      segmentData[offset + 5] = segments[i].boundary_value;
+    }
+
+    this.segmentGeomBuffer = device.createBuffer({
+      label: "segment geo buffer",
+      size: segments.length * 6 * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    device.queue.writeBuffer(this.segmentGeomBuffer, 0, segmentData);
 
     // =============================
     //    UV PREPROCESS SETUP
@@ -261,6 +296,7 @@ export class Renderer {
         { binding: 1, resource: { buffer: this.simTLBuffer } },
         { binding: 2, resource: { buffer: this.simSizeBuffer } },
         { binding: 3, resource: { buffer: this.circleGeomBuffer } },
+        { binding: 4, resource: { buffer: this.segmentGeomBuffer } },
       ],
     });
 
@@ -308,6 +344,7 @@ export class Renderer {
         { binding: 2, resource: { buffer: this.simSizeBuffer } },
         { binding: 3, resource: { buffer: this.walkCountBuffer } },
         { binding: 4, resource: { buffer: this.circleGeomBuffer } },
+        { binding: 5, resource: { buffer: this.segmentGeomBuffer } },
       ],
     });
 

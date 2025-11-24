@@ -10,16 +10,40 @@ struct NeumannHit {
     flux: f32
 }
 
+struct Segment {
+    start: vec2f,
+    end: vec2f,
+    widthRadius: f32,
+    boundary_value: f32
+}
 
 @group(0) @binding(0) var<uniform> simRes: vec2u;
 @group(0) @binding(1) var<uniform> simTL: vec2f;
 @group(0) @binding(2) var<uniform> simSize: vec2f;
 @group(0) @binding(3) var<uniform> totalWalks: u32;
 @group(0) @binding(4) var<storage> circles: array<Circle>;
+@group(0) @binding(5) var<storage> segments: array<Segment>;
 
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 @group(1) @binding(1) var<storage, read_write> wos_valueList: array<f32>;
 
+
+
+fn distanceToSegment(worldPos: vec2f, segment: Segment) -> f32 {
+    let AB = segment.end - segment.start;
+    let AP = worldPos - segment.start;
+    let t = dot(AP, AB) / dot(AB, AB);
+
+    var dist = length(AP - AB * t);
+
+    if t < 0.0 {
+        dist = length(AP);
+    } else if t > 1.0 {
+        dist = length(worldPos - segment.end);
+    }
+
+    return dist - segment.widthRadius;
+}
 
 
 fn randomFloat(state: ptr<function, u32>) -> f32 {
@@ -51,10 +75,26 @@ fn distanceToBoundaryWoS(pos: vec2f) -> vec2f {
         }
     }
 
+
+    var segmentDistFinal = distanceToSegment(pos, segments[0]);
+    var segmentbValFinal = segments[0].boundary_value;
+    for (var i = 1u; i < arrayLength(&segments); i++) {
+        let curDist = distanceToSegment(pos, segments[i]);
+        if curDist < segmentDistFinal {
+            segmentDistFinal = curDist;
+            segmentbValFinal = segments[i].boundary_value;
+        }
+    }
+
     var result = vec2f(circleDistFinal, circlebValFinal);
-    if boxDist < circleDistFinal {
+    if boxDist < circleDistFinal && boxDist < segmentDistFinal {
         result[0] = boxDist;
         result[1] = 0.0;
+    }
+
+    if segmentDistFinal < circleDistFinal && segmentDistFinal < boxDist {
+        result[0] = segmentDistFinal;
+        result[1] = segmentbValFinal;
     }
 
     return result;

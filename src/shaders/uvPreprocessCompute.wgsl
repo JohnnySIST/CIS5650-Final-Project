@@ -4,12 +4,36 @@ struct Circle {
     boundary_value: f32 // ASSUME DIRCHLE BOUNDARY FOR NOW 
 }
 
+struct Segment {
+    start: vec2f,
+    end: vec2f,
+    widthRadius: f32,
+    boundary_value: f32
+}
+
 @group(0) @binding(0) var<uniform> simRes: vec2u;
 @group(0) @binding(1) var<uniform> simTL: vec2f;
 @group(0) @binding(2) var<uniform> simSize: vec2f;
 @group(0) @binding(3) var<storage> circles: array<Circle>;
+@group(0) @binding(4) var<storage> segments: array<Segment>;
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 
+
+fn distanceToSegment(worldPos: vec2f, segment: Segment) -> f32 {
+    let AB = segment.end - segment.start;
+    let AP = worldPos - segment.start;
+    let t = dot(AP, AB) / dot(AB, AB);
+
+    var dist = length(AP - AB * t);
+
+    if t < 0.0 {
+        dist = length(AP);
+    } else if t > 1.0 {
+        dist = length(worldPos - segment.end);
+    }
+
+    return dist - segment.widthRadius;
+}
 
 fn distanceToBoundary(worldPos: vec2f) -> f32 {
     let texSizef = vec2f(f32(simRes.x), f32(simRes.y));
@@ -26,7 +50,12 @@ fn distanceToBoundary(worldPos: vec2f) -> f32 {
         circleDistFinal = min(circleDistFinal, length(worldPos - circles[i].center) - circles[i].radius);
     }
 
-    return min(boxDist, circleDistFinal);
+    var segmentDistFinal = distanceToSegment(worldPos, segments[0]);
+    for (var i = 1u; i < arrayLength(&segments); i++) {
+        segmentDistFinal = min(segmentDistFinal, distanceToSegment(worldPos, segments[i]));
+    }
+
+    return min(min(boxDist, circleDistFinal), segmentDistFinal);
 }
 
 @compute @workgroup_size(8, 8)

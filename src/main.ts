@@ -1,8 +1,12 @@
-import { Renderer } from "./renderers/renderer";
+import {
+  Circle as RenderCircle,
+  Renderer,
+  Segment as RenderSegment,
+} from "./renderers/renderer";
 import "./style.css";
 import { assert } from "./utils/util";
 
-import { parseKicadPcb, KicadPcb, Segment, FootprintPad } from "kicadts";
+import { parseKicadPcb, KicadPcb, FootprintPad, Segment } from "kicadts";
 
 // =============================================================================
 // Data Structures
@@ -41,6 +45,13 @@ class PCBEditor {
   private viewTL: [number, number]; // floats, world space
   private viewSize: [number, number]; // floats, world space
 
+  private targetPads: FootprintPad[] = [];
+  private targetSegments: Segment[] = [];
+
+  private selectedPad: FootprintPad | null = null;
+  private selectedSegment: Segment | null = null;
+  private targetLayer = "B.Cu";
+
   constructor(
     canvas: HTMLCanvasElement,
     context: GPUCanvasContext,
@@ -48,11 +59,15 @@ class PCBEditor {
   ) {
     this.canvas = canvas;
     this.simRes = [canvas.width, canvas.height];
-    this.simTL = [0, 0];
-    this.simSize = [200, 200];
+    // this.simTL = [-1, -1];
+    this.simTL = [120, 90];
+    // this.simSize = [2, 2];
+    this.simSize = [60, 60];
     this.viewRes = [canvas.width, canvas.height];
-    this.viewTL = [0, 0];
-    this.viewSize = [200, 200];
+    // this.viewTL = [-1, -1];
+    this.viewTL = this.simTL; // [0, 0];
+    // this.viewSize = [2, 2];
+    this.viewSize = this.simSize; // [60, 60];
 
     this.renderer = new Renderer(
       canvas,
@@ -128,7 +143,7 @@ class PCBEditor {
       this.viewSize[0] *= zoomInOutFactor;
       this.viewSize[1] *= zoomInOutFactor;
       const zoomMinClamp = 0.1;
-      const zoomMaxClamp = 10;
+      const zoomMaxClamp = 1000;
       this.viewSize[0] = Math.max(
         zoomMinClamp,
         Math.min(this.viewSize[0], zoomMaxClamp)
@@ -157,6 +172,113 @@ class PCBEditor {
     this.canvas.addEventListener("click", (e) => {
       const clickPos = this.getMouseWorldPosition(e);
       switch (this.state.mode) {
+        case "select":
+          const drawAbleFootprintPads: FootprintPad[] =
+            this.pcbDesign?.footprints.flatMap((footprint) => {
+              return (
+                footprint.fpPads
+                  .filter((pad) => {
+                    return (
+                      (pad.shape === "circle" || pad.shape === "oval") &&
+                      pad.layers.layers.some((layer) => {
+                        return makeRegexFromWildcardString(layer).test(
+                          this.targetLayer
+                        );
+                      })
+                    );
+                  })
+                  .find((pad) => {
+                    const centerX = footprint.position.x + pad.at.x;
+                    const centerY = footprint.position.y + pad.at.y;
+                    const dist = Math.sqrt(
+                      (centerX - clickPos.x) ** 2 + (centerY - clickPos.y) ** 2
+                    );
+                    return dist < pad.size.height / 2;
+                  }) ?? []
+              );
+            });
+          console.log("drawAbleFootprintPads", drawAbleFootprintPads);
+          this.selectedPad = drawAbleFootprintPads[0] ?? null;
+
+          this.selectedSegment =
+            this.pcbDesign?.segments
+              .filter((segment) => {
+                return segment.layer.names.some((layer) => {
+                  return makeRegexFromWildcardString(layer).test(
+                    this.targetLayer
+                  );
+                });
+              })
+              .find((segment) => {
+                const ABX = segment.end.x - segment.start.x;
+                const ABY = segment.end.y - segment.start.y;
+
+                const APX = clickPos.x - segment.start.x;
+                const APY = clickPos.y - segment.start.y;
+
+                const ABAP = ABX * APX + ABY * APY;
+
+                const ABAB = ABX * ABX + ABY * ABY;
+
+                const t = ABAP / ABAB;
+
+                if (t < 0) {
+                  const dist = Math.sqrt(
+                    (segment.start.x - clickPos.x) ** 2 +
+                      (segment.start.y - clickPos.y) ** 2
+                  );
+                  return dist < segment.width / 2;
+                }
+                if (t > 1) {
+                  const dist = Math.sqrt(
+                    (segment.end.x - clickPos.x) ** 2 +
+                      (segment.end.y - clickPos.y) ** 2
+                  );
+                  return dist < segment.width / 2;
+                }
+
+                const projX = segment.start.x + t * ABX;
+                const projY = segment.start.y + t * ABY;
+
+                const dist = Math.sqrt(
+                  (projX - clickPos.x) ** 2 + (projY - clickPos.y) ** 2
+                );
+                return dist < segment.width / 2;
+              }) ?? null;
+          break;
+      }
+    });
+
+    const traceWidthSlider = document.getElementById(
+      "trace-width-slider"
+    ) as HTMLInputElement;
+    const traceWidthInput = document.getElementById(
+      "trace-width-input"
+    ) as HTMLInputElement;
+
+    traceWidthSlider.addEventListener("input", () => {
+      const width = Number(traceWidthSlider.value);
+      traceWidthInput.value = width.toString();
+      if (this.selectedPad) {
+        this.selectedPad.size.height = width;
+        this.refreshSimulation(); // Re-render to show ghost trace with new width
+      }
+      if (this.selectedSegment) {
+        this.selectedSegment.width = width;
+        this.refreshSimulation(); // Re-render to show ghost trace with new width
+      }
+    });
+
+    traceWidthInput.addEventListener("input", () => {
+      const width = Number(traceWidthInput.value);
+      traceWidthSlider.value = width.toString();
+      if (this.selectedPad) {
+        this.selectedPad.size.height = width;
+        this.refreshSimulation(); // Re-render to show ghost trace with new width
+      }
+      if (this.selectedSegment) {
+        this.selectedSegment.width = width;
+        this.refreshSimulation(); // Re-render to show ghost trace with new width
       }
     });
 
@@ -181,55 +303,9 @@ class PCBEditor {
           const file = target.files[0];
           const content = await file.text();
           const pcb = parseKicadPcb(content);
+          this.pcbDesign = pcb;
           console.log("Parsed KiCad PCB file:", pcb);
-
-          const targetLayer = "B.Cu";
-
-          // const footprintPads = pcb.footprints.flatMap((footprint) => {
-          //   return footprint.fpPads.filter((pad) => {
-          //     return pad.layers.layers.some((layer) => {
-          //       return makeRegexFromWildcardString(layer).test(targetLayer);
-          //     });
-          //   });
-          // });
-
-          // const segments = pcb.segments.filter((segment) => {
-          //   return segment.layer.names.some((layer) => {
-          //     return makeRegexFromWildcardString(layer).test(targetLayer);
-          //   });
-          // });
-
-          // console.log("Found pads:", footprintPads);
-          // console.log("Found segments:", segments);
-
-          const drawAbleFootprintPads = pcb.footprints.flatMap((footprint) => {
-            return footprint.fpPads
-              .filter((pad) => {
-                return (
-                  pad.shape === "circle" &&
-                  pad.layers.layers.some((layer) => {
-                    return makeRegexFromWildcardString(layer).test(targetLayer);
-                  })
-                );
-              })
-              .map((pad) => {
-                return {
-                  x: footprint.position.x + pad.at.x,
-                  y: footprint.position.y + pad.at.y,
-                  radius: pad.size.height / 2,
-                };
-              });
-          });
-
-          this.renderer.setCircles(
-            drawAbleFootprintPads.map((pad) => {
-              return {
-                center: [pad.x, pad.y],
-                radius: pad.radius,
-                boundary_value: Math.random(),
-              };
-            })
-          );
+          this.refreshSimulation();
         }
       });
 
@@ -238,6 +314,58 @@ class PCBEditor {
       ?.addEventListener("click", () => {
         this.exportToKiCad();
       });
+  }
+
+  private refreshSimulation() {
+    const drawAbleFootprintPads = this.pcbDesign?.footprints.flatMap(
+      (footprint) => {
+        return footprint.fpPads
+          .filter((pad) => {
+            return (
+              (pad.shape === "circle" || pad.shape === "oval") &&
+              pad.layers.layers.some((layer) => {
+                return makeRegexFromWildcardString(layer).test(
+                  this.targetLayer
+                );
+              })
+            );
+          })
+          .map((pad) => {
+            return {
+              x: footprint.position.x + pad.at.x, // TODO: Apply rotation
+              y: footprint.position.y + pad.at.y,
+              radius: pad.size.height / 2,
+            };
+          });
+      }
+    );
+
+    const drawAbleSegments = this.pcbDesign?.segments.filter((segment) => {
+      return segment.layer.names.some((layer) => {
+        return makeRegexFromWildcardString(layer).test(this.targetLayer);
+      });
+    });
+
+    const renderCircles: RenderCircle[] = drawAbleFootprintPads.map((pad) => {
+      return {
+        center: [pad.x, pad.y],
+        radius: pad.radius,
+        boundary_value: Math.random(),
+      };
+    });
+    console.log("Found pads:", drawAbleFootprintPads);
+
+    const renderSegments: RenderSegment[] = drawAbleSegments.map((segment) => {
+      return {
+        start: [segment.startPoint.x, segment.startPoint.y],
+        end: [segment.endPoint.x, segment.endPoint.y],
+        widthRadius: segment.width / 2,
+        boundary_value: Math.random(),
+      };
+    });
+    console.log("Found segments:", drawAbleSegments);
+
+    this.renderer.setCircles(renderCircles, renderSegments);
   }
 
   private exportToKiCad() {
