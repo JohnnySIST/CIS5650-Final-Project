@@ -123,6 +123,16 @@ class EditorState {
   public traceWidth: number = 5;
 }
 
+function makeRegexFromWildcardString(str: string): RegExp {
+  let escapedPattern = str.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+
+  // Replace wildcard characters with regex equivalents
+  let regexPattern = escapedPattern.replace(/\*/g, ".*");
+
+  // Anchor the regex to match the entire string (optional, but often desired)
+  return new RegExp(`^${regexPattern}$`);
+}
+
 class PCBEditor {
   private canvas: HTMLCanvasElement;
   private state: EditorState = new EditorState();
@@ -314,38 +324,21 @@ class PCBEditor {
           const targetLayer = "B.Cu";
 
           const footprintPads = pcb.footprints.flatMap((footprint) => {
-            return footprint.fpPads.map((pad) => {
-              pad.layers.layers.map((layer) => {
-                let escapedPattern = layer.replace(
-                  /[.*+?^${}()|[\]\\]/g,
-                  "\\$&"
-                );
-
-                // Replace wildcard characters with regex equivalents
-                let regexPattern = escapedPattern.replace(/\*/g, ".*");
-
-                // Anchor the regex to match the entire string (optional, but often desired)
-                return new RegExp(`^${regexPattern}$`);
+            return footprint.fpPads.filter((pad) => {
+              return pad.layers.layers.some((layer) => {
+                return makeRegexFromWildcardString(layer).test(targetLayer);
               });
             });
-            // return footprint.fpPads.filter((pad) => {
-            //   return pad.layers.layers.some((layer) => {
-            //     let escapedPattern = layer.replace(
-            //       /[.*+?^${}()|[\]\\]/g,
-            //       "\\$&"
-            //     );
+          });
 
-            //     // Replace wildcard characters with regex equivalents
-            //     let regexPattern = escapedPattern.replace(/\*/g, ".*");
-
-            //     // Anchor the regex to match the entire string (optional, but often desired)
-            //     return new RegExp(`^${regexPattern}$`).test(targetLayer);
-            //     return layer === targetLayer || layer === "*.Cu";
-            //   });
-            // });
+          const segments = pcb.segments.filter((segment) => {
+            return segment.layer.names.some((layer) => {
+              return makeRegexFromWildcardString(layer).test(targetLayer);
+            });
           });
 
           console.log("Found pads:", footprintPads);
+          console.log("Found segments:", segments);
         }
       });
   }
