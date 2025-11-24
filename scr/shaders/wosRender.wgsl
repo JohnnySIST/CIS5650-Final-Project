@@ -33,6 +33,7 @@ fn fragMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     } else {
         //twoToneColor(temp / f32(totalWalks));
         let outColor = color(vec3f(0.5,0.5,0.5), vec3f(0.5, 0.5, 0.5), vec3f(1.0, 1.0, 1.0), vec3f(0.00, 0.33, 0.67), temp / f32(totalWalks));
+        //let outColor = color(vec3f(0.5, 0.5, 0.5), vec3f(0.5, 0.5, 0.5), vec3f(2.0, 1.0, 0.0), vec3f(0.5, 0.2, 0.25), temp / f32(totalWalks));
         return vec4f(outColor, 1.0);
     }
 }

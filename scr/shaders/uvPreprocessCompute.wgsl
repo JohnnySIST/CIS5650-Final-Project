@@ -13,8 +13,8 @@ fn distanceToBoundary(pos: vec2f, texSize: vec2u) -> f32 {
   let texSizef = vec2f(f32(texSize.x), f32(texSize.y));
   
   // REPLACE BOX WITH THE USER DEFINED BOUNDARY. IF NOTHING, MAKE IT SCREEN SIZE
-  let boxMin = texSizef * 0.1;
-  let boxMax = texSizef * 0.9;
+  let boxMin = texSizef * 0.05;
+  let boxMax = texSizef * 0.95;
 
   let boxDist = min(
     min(pos.x - boxMin.x, boxMax.x - pos.x),
