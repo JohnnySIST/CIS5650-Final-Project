@@ -8,6 +8,7 @@ struct Circle {
 @group(0) @binding(0) var<uniform> domainDim: vec2u;
 @group(0) @binding(1) var<uniform> totalWalks: u32;
 @group(0) @binding(2) var<storage> circles: array<Circle>;
+@group(0) @binding(3) var<uniform> cameraMatrixInv: mat4x4<f32>;
 
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 @group(1) @binding(1) var<storage, read_write> wos_valueList: array<f32>;
@@ -93,6 +94,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   }
 
   let worldPos = vec2f(f32(coords.x), f32(coords.y));
+  let worldPosTransformed = (cameraMatrixInv * vec4f(worldPos.x, worldPos.y, 0.0, 1.0)).xy;
 
   // Do multiple WoS walks and average
   let numWalks = 4u;
@@ -100,7 +102,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   var rngState = u32(coords.x) * 747796405u + u32(coords.y) * 2891336453u * totalWalks;
   
   for (var i = 0u; i < numWalks; i++) {
-    let temp = walkOnSpheres(worldPos, texSize, &rngState);
+    let temp = walkOnSpheres(worldPosTransformed, texSize, &rngState);
     totalTemp += temp;
   }
   

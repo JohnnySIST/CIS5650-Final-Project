@@ -1,6 +1,7 @@
 import './style.css';
 import init from './renderers/renderer';
 import { assert } from './utils/util';
+import { Camera2D } from './ui/camera';
 
 (async () => {
   
@@ -33,6 +34,9 @@ import { assert } from './utils/util';
     
   const context = canvas.getContext('webgpu') as GPUCanvasContext;
 
-  init(canvas, context, device);
+  const camera = new Camera2D();
+  camera.init(canvas);
+
+  init(canvas, context, device, camera);
 
 })();

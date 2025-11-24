@@ -6,6 +6,7 @@ struct Circle {
 
 @group(0) @binding(0) var<uniform> domainDim: vec2u;
 @group(0) @binding(1) var<storage> circles: array<Circle>;
+@group(0) @binding(2) var<uniform> cameraMatrixInv: mat4x4<f32>;
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 
 
@@ -43,8 +44,9 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   let uv = vec2f(f32(coords.x), f32(coords.y)) / vec2f(f32(texSize.x), f32(texSize.y));
 
   let worldPos = vec2f(f32(coords.x), f32(coords.y));
+  let worldPosTransformed = (cameraMatrixInv * vec4f(worldPos.x, worldPos.y, 0.0, 1.0)).xy;
   
-  let dist = distanceToBoundary(worldPos, texSize);
+  let dist = distanceToBoundary(worldPosTransformed, texSize);
 
   // ONLY STORE UVs WITHIN OUR DOMAIN 
   uv_list[index] = uv;
