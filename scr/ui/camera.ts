@@ -148,7 +148,7 @@ export class Camera2D {
     ];
   }
 
-  getSelectionBounds(): number[] | null {
+  getSelectionBounds(): number[] {
     const canvasSize = this.renderer && typeof this.renderer.getCanvasSize === 'function'
       ? this.renderer.getCanvasSize()
       : { width: 0, height: 0 };

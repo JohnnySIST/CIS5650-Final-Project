@@ -3,8 +3,7 @@ import init from './renderers/renderer';
 import { assert } from './utils/util';
 import { Camera2D } from './ui/camera';
 
-(async () => {
-  
+export async function startWebGPURender() {
   if (navigator.gpu === undefined) {
     const h = document.querySelector('#title') as HTMLElement;
     h.innerText = 'WebGPU is not supported in this browser.';
@@ -40,6 +39,5 @@ import { Camera2D } from './ui/camera';
   const camera = new Camera2D();
   camera.init(canvas, uiCanvas);
 
-  init(canvas, context, device, camera);
-
-})();
+  return await init(canvas, context, device, camera);
+}

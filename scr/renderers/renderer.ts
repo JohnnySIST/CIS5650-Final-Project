@@ -6,6 +6,7 @@ export interface Renderer {
   frame: (encoder: GPUCommandEncoder, texture_view: GPUTextureView) => void,
   updateCameraBuffer: (data: number[]) => void,
   getCanvasSize?: () => { width: number, height: number }
+  setFpsCallback: (fpsCallback: (fps: number) => void) => void
 }
 
 export default async function init(
@@ -255,7 +256,23 @@ export default async function init(
   // ===============================
   //    THIS RENDERS STUFF :)
   // ===============================
+
+  let lastFpsTime = performance.now();
+  let frameCount = 0;
+  let fpsCallback: ((fps: number) => void) | null = null;
+
   function frame() {
+    // FPS Monitoring
+    frameCount++;
+    const now = performance.now();
+    if (now - lastFpsTime >= 1000) {
+      if (fpsCallback) {
+        fpsCallback(frameCount);
+      }
+      frameCount = 0;
+      lastFpsTime = now;
+    }
+
     const commandEncoder = device.createCommandEncoder();
 
     const uvPreComputePass = commandEncoder.beginComputePass();
@@ -303,4 +320,14 @@ export default async function init(
 
   requestAnimationFrame(frame);
 
+  return {
+    frame,
+    updateCameraBuffer: (data: number[]) => {
+      device.queue.writeBuffer(cameraMatrixBuffer, 0, new Float32Array(data));
+    },
+    getCanvasSize: () => ({ width: canvas.width, height: canvas.height }),
+    setFpsCallback: (callback: (fps: number) => void) => {
+      fpsCallback = callback;
+    }
+  };
 }
