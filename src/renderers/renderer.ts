@@ -111,6 +111,11 @@ export class Renderer {
 
   private simUpdateId: number = 0;
 
+  private fpsCallback: (fps: number) => void;
+
+  private lastFpsTime: number;
+  private frameCount: number = 0;
+
   constructor(
     canvas: HTMLCanvasElement,
     context: GPUCanvasContext,
@@ -120,7 +125,8 @@ export class Renderer {
     simSize: [number, number] = [1.8, 1.8],
     viewRes: [number, number] = [canvas.width, canvas.height],
     viewTL: [number, number] = [-1, -1],
-    viewSize: [number, number] = [2, 2]
+    viewSize: [number, number] = [2, 2],
+    fpsCallback: (fps: number) => void = () => {}
   ) {
     this.canvas = canvas;
     this.context = context;
@@ -131,7 +137,9 @@ export class Renderer {
     this.viewRes = viewRes;
     this.viewTL = viewTL;
     this.viewSize = viewSize;
+    this.fpsCallback = fpsCallback;
     this.init();
+    this.lastFpsTime = performance.now();
   }
 
   private async init() {
@@ -142,7 +150,7 @@ export class Renderer {
       format: this.format,
     });
 
-    this.setCircles();
+    await this.setCircles();
   }
 
   async updateParams({
@@ -453,6 +461,15 @@ export class Renderer {
     if (simUpdateId !== this.simUpdateId) {
       return;
     }
+
+    this.frameCount++;
+    const now = performance.now();
+    if (now - this.lastFpsTime >= 1000) {
+      this.fpsCallback(this.frameCount);
+      this.frameCount = 0;
+      this.lastFpsTime = now;
+    }
+
     const canvas = this.canvas;
     const context = this.context;
     const device = this.device;

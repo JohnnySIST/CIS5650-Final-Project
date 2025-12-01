@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import WosCanvas from './WosCanvas';
-import FpsBadge from './FpsBadge';
+import React, { useEffect, useState } from "react";
+import WosCanvas from "./WosCanvas";
+import FpsBadge from "./FpsBadge";
 
 export default function App() {
   const [fps, setFps] = useState(0);

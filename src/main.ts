@@ -11,64 +11,18 @@ import { parseKicadPcb, KicadPcb, FootprintPad, Segment } from "kicadts";
 // =============================================================================
 // Data Structures
 // =============================================================================
-type Vec2 = { x: number; y: number };
-type EditorMode = "select";
 
-function makeRegexFromWildcardString(str: string): RegExp {
-  let escapedPattern = str.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
-
-  // Replace wildcard characters with regex equivalents
-  let regexPattern = escapedPattern.replace(/\*/g, ".*");
-
-  // Anchor the regex to match the entire string
-  return new RegExp(`^${regexPattern}$`);
-}
-
-class EditorState {
-  public mode: EditorMode = "select";
-  public isPanning: boolean = false;
-}
-
-class PCBEditor {
-  private canvas: HTMLCanvasElement;
-  private state: EditorState = new EditorState();
-
+export class PCBEditor {
   private pcbDesign: KicadPcb | null = null;
 
   private renderer: Renderer;
 
-  private simRes: [number, number]; // integers, pixels
-  private simTL: [number, number]; // floats, world space
-  private simSize: [number, number]; // floats, world space
-
-  private viewRes: [number, number]; // integers, pixels
-  private viewTL: [number, number]; // floats, world space
-  private viewSize: [number, number]; // floats, world space
-
-  private targetPads: FootprintPad[] = [];
-  private targetSegments: Segment[] = [];
-
-  private selectedPad: FootprintPad | null = null;
-  private selectedSegment: Segment | null = null;
-  private targetLayer = "B.Cu";
-
   constructor(
     canvas: HTMLCanvasElement,
     context: GPUCanvasContext,
-    device: GPUDevice
+    device: GPUDevice,
+    fpsCallback?: (fps: number) => void
   ) {
-    this.canvas = canvas;
-    this.simRes = [canvas.width, canvas.height];
-    // this.simTL = [-1, -1];
-    this.simTL = [120, 90];
-    // this.simSize = [2, 2];
-    this.simSize = [60, 60];
-    this.viewRes = [canvas.width, canvas.height];
-    // this.viewTL = [-1, -1];
-    this.viewTL = this.simTL; // [0, 0];
-    // this.viewSize = [2, 2];
-    this.viewSize = this.simSize; // [60, 60];
-
     this.renderer = new Renderer(
       canvas,
       context,
@@ -78,14 +32,14 @@ class PCBEditor {
       this.simSize,
       this.viewRes,
       this.viewTL,
-      this.viewSize
+      this.viewSize,
+      fpsCallback
     );
     this.init();
   }
 
   private async init() {
     this.setupEventListeners();
-    // this.render();
   }
 
   private getMouseWorldPosition(e: MouseEvent): Vec2 {
@@ -385,46 +339,3 @@ class PCBEditor {
     URL.revokeObjectURL(a.href);
   }
 }
-
-// =============================================================================
-// Main Execution
-// =============================================================================
-async function main() {
-  console.log("Main function started");
-  if (navigator.gpu === undefined) {
-    const h = document.querySelector("#title") as HTMLElement;
-    h.innerText = "WebGPU is not supported in this browser.";
-    return;
-  }
-
-  const adapter = await navigator.gpu.requestAdapter({
-    powerPreference: "high-performance",
-  });
-  if (adapter === null) {
-    const h = document.querySelector("#title") as HTMLElement;
-    h.innerText = "No adapter is available for WebGPU.";
-    return;
-  }
-
-  const device = await adapter.requestDevice({
-    requiredLimits: {
-      maxComputeWorkgroupStorageSize:
-        adapter.limits.maxComputeWorkgroupStorageSize,
-      maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
-      maxStorageBuffersPerShaderStage: 10,
-    },
-  });
-
-  const canvas = document.querySelector<HTMLCanvasElement>("#canvas");
-  assert(canvas !== null, "Could not find canvas element");
-  canvas.width = canvas.clientWidth;
-  canvas.height = canvas.clientHeight;
-
-  const context = canvas.getContext("webgpu") as GPUCanvasContext;
-
-  const editor = new PCBEditor(canvas, context, device);
-
-  console.log("Main function completed");
-}
-
-await main();
