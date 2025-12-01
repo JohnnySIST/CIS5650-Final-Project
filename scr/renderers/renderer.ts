@@ -4,14 +4,22 @@ import wosRender from '../shaders/wosRender.wgsl?raw';
 
 export interface Renderer {
   frame: (encoder: GPUCommandEncoder, texture_view: GPUTextureView) => void,
+  updateCameraBuffer: (data: number[]) => void,
+  getCanvasSize?: () => { width: number, height: number }
+  setFpsCallback: (fpsCallback: (fps: number) => void) => void
 }
 
 export default async function init(
   canvas: HTMLCanvasElement,
   context: GPUCanvasContext,
-  device: GPUDevice
+  device: GPUDevice,
+  camera: {
+    getTransform: () => number[],
+    getInverseTransform: () => number[],
+    setRenderer?: (renderer: any) => void,
+    getSelectionBounds: () => number[]
+  }
 ) {
-
   const format = navigator.gpu.getPreferredCanvasFormat();
   context.configure({
     device,
@@ -161,6 +169,38 @@ export default async function init(
   device.queue.writeBuffer(circleGeomBuffer, 0, circleData);
 
   // =============================
+  //    CAMERA BUFFER SETUP
+  // =============================
+
+  if (typeof camera.setRenderer === 'function') {
+    camera.setRenderer({
+      updateCameraBuffer: () => {
+        device.queue.writeBuffer(cameraMatrixBuffer, 0, new Float32Array(camera.getInverseTransform()));
+        device.queue.writeBuffer(wosValuesBuffer, 0, new Float32Array(canvas.width * canvas.height));
+        device.queue.writeBuffer(selectionBuffer, 0, new Float32Array(camera.getSelectionBounds()));
+        totalWalks = 0;
+      },
+      getCanvasSize: () => ({ width: canvas.width, height: canvas.height })
+    });
+  }
+
+  // Camera matrix buffer
+  const cameraMatrixBuffer = device.createBuffer({
+    label: 'camera matrix buffer',
+    size: 64, // 16 * 4 bytes
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+  device.queue.writeBuffer(cameraMatrixBuffer, 0, new Float32Array(camera.getInverseTransform()));
+
+  // Camera selection buffer
+  const selectionBuffer = device.createBuffer({
+    label: 'camera selection buffer',
+    size: 16, // 4 * 4 bytes (minX, minY, maxX, maxY)
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+  device.queue.writeBuffer(selectionBuffer, 0, new Float32Array(camera.getSelectionBounds()));
+
+  // =============================
   //    UV PREPROCESS SETUP
   // =============================
 
@@ -195,8 +235,10 @@ export default async function init(
   const domainSizeBindGroup_uvPre = device.createBindGroup({
     label: 'domain size uvPre bg',
     layout: uvPre_Pipeline.getBindGroupLayout(0),
-    entries: [{binding: 0, resource: {buffer: domainSizeBuffer}},
-              {binding: 1, resource: {buffer: circleGeomBuffer}}
+    entries: [
+      {binding: 0, resource: {buffer: domainSizeBuffer}},
+      {binding: 1, resource: {buffer: circleGeomBuffer}},
+      {binding: 2, resource: {buffer: cameraMatrixBuffer}}
     ]
   });
 
@@ -239,9 +281,11 @@ export default async function init(
   const domainSizeBindGroup_wos = device.createBindGroup({
     label: 'domain size wos bg',
     layout: wos_pipeline.getBindGroupLayout(0),
-    entries: [{binding: 0, resource: {buffer: domainSizeBuffer}},
-              {binding: 1, resource: {buffer: walkCountBuffer}},
-              {binding: 2, resource: {buffer: circleGeomBuffer}}]
+    entries: [
+      {binding: 0, resource: {buffer: domainSizeBuffer}},
+      {binding: 1, resource: {buffer: walkCountBuffer}},
+      {binding: 2, resource: {buffer: circleGeomBuffer}},
+    ]
   });
 
   const wosValuesBuffer = device.createBuffer({
@@ -257,6 +301,14 @@ export default async function init(
               {binding: 1, resource: {buffer: wosValuesBuffer}}]
   });
 
+  const cameraUniformBindGroup_wos = device.createBindGroup({
+    label: 'camera uniform bg',
+    layout: wos_pipeline.getBindGroupLayout(2),
+    entries: [
+      {binding: 0, resource: {buffer: cameraMatrixBuffer}},
+      {binding: 1, resource: {buffer: selectionBuffer}},
+    ]
+  });
 
   // ======================================
   //    OUTPUT VERT / FRAG FOR RENDERING
@@ -298,7 +350,23 @@ export default async function init(
   // ===============================
   //    THIS RENDERS STUFF :)
   // ===============================
-   function frame() {
+
+  let lastFpsTime = performance.now();
+  let frameCount = 0;
+  let fpsCallback: ((fps: number) => void) | null = null;
+
+  function frame() {
+    // FPS Monitoring
+    frameCount++;
+    const now = performance.now();
+    if (now - lastFpsTime >= 1000) {
+      if (fpsCallback) {
+        fpsCallback(frameCount);
+      }
+      frameCount = 0;
+      lastFpsTime = now;
+    }
+
     const commandEncoder = device.createCommandEncoder();
 
     const uvPreComputePass = commandEncoder.beginComputePass();
@@ -320,6 +388,7 @@ export default async function init(
     wosComputePass.setPipeline(wos_pipeline);
     wosComputePass.setBindGroup(0, domainSizeBindGroup_wos);
     wosComputePass.setBindGroup(1, uvBindGroup_compute);
+    wosComputePass.setBindGroup(2, cameraUniformBindGroup_wos);
     wosComputePass.dispatchWorkgroups(dispatchX_wos, dispatchY_wos);
     wosComputePass.end();
 
@@ -345,4 +414,14 @@ export default async function init(
 
   requestAnimationFrame(frame);
 
+  return {
+    frame,
+    updateCameraBuffer: (data: number[]) => {
+      device.queue.writeBuffer(cameraMatrixBuffer, 0, new Float32Array(data));
+    },
+    getCanvasSize: () => ({ width: canvas.width, height: canvas.height }),
+    setFpsCallback: (callback: (fps: number) => void) => {
+      fpsCallback = callback;
+    }
+  };
 }
