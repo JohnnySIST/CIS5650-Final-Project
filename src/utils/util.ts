@@ -35,7 +35,7 @@ export function align(n: number, alignment: number): number {
   return Math.ceil(n / alignment) * alignment;
 }
 
-function makeRegexFromWildcardString(str: string): RegExp {
+export function makeRegexFromWildcardString(str: string): RegExp {
   let escapedPattern = str.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
 
   // Replace wildcard characters with regex equivalents
