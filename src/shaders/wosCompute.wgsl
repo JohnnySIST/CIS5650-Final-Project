@@ -55,7 +55,6 @@ fn randomFloat(state: ptr<function, u32>) -> f32 {
 
 // REGULAR WoS
 fn distanceToBoundaryWoS(pos: vec2f) -> vec2f {
-
     let simBR = simTL + simSize;
 
     let boxDist = min(
@@ -103,8 +102,8 @@ fn distanceToBoundaryWoS(pos: vec2f) -> vec2f {
 fn walkOnSpheres(startPos: vec2f, rngState: ptr<function, u32>) -> f32 {
     var pos = startPos;
     var temp = 0.0;
-    let epsilon = 0.001; // was 2.0
-    let maxSteps = 100;
+    let epsilon = 0.01; // was 2.0
+    let maxSteps = 50;
 
     for (var step = 0; step < maxSteps; step++) {
         let boundaryResult = distanceToBoundaryWoS(pos);

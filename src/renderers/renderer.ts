@@ -14,6 +14,96 @@ export interface Segment {
   boundary_value: number;
 }
 
+interface Grid {
+  gridRes: [number, number];
+  gridCells: Uint32Array; // Pairs of two values (start, end) for indices into cellGeoms
+  cellGeoms: Uint32Array; // list of geoms for each cell 
+}
+
+interface Geom {
+  type: number; // 0 indicates circle, 1 indicates segment
+  index: number; 
+}
+
+function buildGridAcceleration(
+  circles: Circle[],
+  segments: Segment[],
+  simTL: [number, number],
+  simSize: [number, number],
+  gridRes: [number, number] = [32, 32]
+): Grid {
+  const [gridW, gridH] = gridRes;
+  const cellSize = [simSize[0] / gridW, simSize[1] / gridH];
+
+  const cellBoundaries: Geom[][] = [];
+  for (let i = 0; i < gridW * gridH; i++) {
+    cellBoundaries.push([]);
+  }
+
+  function addToCells(
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+    geomType: number,
+    geomIndex: number
+  ) {
+    const cellMinX = Math.floor((minX - simTL[0]) / cellSize[0]);
+    const cellMinY = Math.floor((minY - simTL[1]) / cellSize[1]);
+    const cellMaxX = Math.floor((maxX - simTL[0]) / cellSize[0]);
+    const cellMaxY = Math.floor((maxY - simTL[1]) / cellSize[1]);
+
+    for (let cy = Math.max(0, cellMinY); cy <= Math.min(gridH - 1, cellMaxY); cy++) {
+      for (let cx = Math.max(0, cellMinX); cx <= Math.min(gridW - 1, cellMaxX); cx++) {
+        const cellIdx = cy * gridW + cx;
+        
+        cellBoundaries[cellIdx].push({ type: geomType, index: geomIndex });
+      }
+    }
+  }
+
+  circles.forEach((circle, i) => {
+    const [cx, cy] = circle.center;
+    const r = circle.radius;
+    addToCells(cx - r, cy - r, cx + r, cy + r, 0, i);
+  });
+
+  segments.forEach((seg, i) => {
+    const [x1, y1] = seg.start;
+    const [x2, y2] = seg.end;
+    const r = seg.widthRadius;
+
+    const minX = Math.min(x1, x2) - r;
+    const minY = Math.min(y1, y2) - r;
+    const maxX = Math.max(x1, x2) + r;
+    const maxY = Math.max(y1, y2) + r;
+
+    addToCells(minX, minY, maxX, maxY, 1, i);
+  });
+
+  let totalRefs = 0;
+  cellBoundaries.forEach((cell) => (totalRefs += cell.length));
+
+  const gridCells = new Uint32Array(gridW * gridH * 2);
+  const cellGeoms = new Uint32Array(totalRefs * 2);
+  
+  let currentIdx = 0;
+  // Loop fills them with data:
+  cellBoundaries.forEach((cell, cellIdx) => {
+    gridCells[cellIdx * 2] = currentIdx;
+    gridCells[cellIdx * 2 + 1] = cell.length;
+    
+    cell.forEach(ref => {
+      cellGeoms[currentIdx * 2] = ref.type;
+      cellGeoms[currentIdx * 2 + 1] = ref.index;
+      currentIdx++;
+    });
+  });
+
+  return { gridRes, gridCells, cellGeoms };
+}
+
+
 const example_circles: Circle[] = [
   // Large circles
   { center: [0.0, 0.0], radius: 0.15, boundary_value: 1.0 },
@@ -241,6 +331,9 @@ export class Renderer {
     });
 
     device.queue.writeBuffer(this.segmentGeomBuffer, 0, segmentData);
+
+    // =============================
+    // SETUP A BVH OR GRID STRUCTURE HERE (change this later so that we only build this when updating the boundaries)
 
     // =============================
     //    UV PREPROCESS SETUP
