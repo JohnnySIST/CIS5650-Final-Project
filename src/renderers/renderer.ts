@@ -16,7 +16,7 @@ export interface Segment {
 
 interface Grid {
   gridRes: [number, number];
-  gridCells: Uint32Array; // Pairs of two values (start, end) for indices into cellGeoms
+  gridCells: Uint32Array; // Pairs of two values (start, length) for indices into cellGeoms
   cellGeoms: Uint32Array; // list of geoms for each cell 
 }
 
@@ -25,7 +25,7 @@ interface Geom {
   index: number; 
 }
 
-function buildGridAcceleration(
+function buildGrid(
   circles: Circle[],
   segments: Segment[],
   simTL: [number, number],
@@ -48,6 +48,11 @@ function buildGridAcceleration(
     geomType: number,
     geomIndex: number
   ) {
+    minX = Math.max(minX, simTL[0]);
+    minY = Math.max(minY, simTL[1]);
+    maxX = Math.min(maxX, simTL[0] + simSize[0]);
+    maxY = Math.min(maxY, simTL[1] + simSize[1]);
+
     const cellMinX = Math.floor((minX - simTL[0]) / cellSize[0]);
     const cellMinY = Math.floor((minY - simTL[1]) / cellSize[1]);
     const cellMaxX = Math.floor((maxX - simTL[0]) / cellSize[0]);
@@ -99,6 +104,7 @@ function buildGridAcceleration(
       currentIdx++;
     });
   });
+
 
   return { gridRes, gridCells, cellGeoms };
 }
@@ -177,6 +183,13 @@ export class Renderer {
   private wosValuesBuffer: GPUBuffer;
   private uvBuffer: GPUBuffer;
   private segmentGeomBuffer: GPUBuffer;
+  
+  // GRID BUFFERS:
+  private gridBindGroup_uvPre: GPUBindGroup;
+  private gridBindGroup_compute: GPUBindGroup;
+  private gridResBuffer: GPUBuffer;
+  private gridCellsBuffer: GPUBuffer;
+  private gridIndicesBuffer: GPUBuffer;
 
   private uvBindGroup_compute: GPUBindGroup;
   private domainSizeBindGroup_frag: GPUBindGroup;
@@ -333,7 +346,31 @@ export class Renderer {
     device.queue.writeBuffer(this.segmentGeomBuffer, 0, segmentData);
 
     // =============================
-    // SETUP A BVH OR GRID STRUCTURE HERE (change this later so that we only build this when updating the boundaries)
+    // SETUP A BVH OR GRID STRUCTURE HERE 
+    // =============================
+    
+    const gridData = buildGrid(circles, segments, this.simTL, this.simSize, [8,8]);
+
+    this.gridResBuffer = device.createBuffer({
+        label: "grid resolution",
+        size: 2 * 4,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(this.gridResBuffer, 0, new Uint32Array(gridData.gridRes));
+
+    this.gridCellsBuffer = device.createBuffer({
+        label: "grid cells",
+        size: gridData.gridCells.byteLength,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(this.gridCellsBuffer, 0, new Uint32Array(gridData.gridCells));
+
+    this.gridIndicesBuffer = device.createBuffer({
+        label: "grid indices",
+        size: gridData.cellGeoms.byteLength,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(this.gridIndicesBuffer, 0,  new Uint32Array(gridData.cellGeoms));
 
     // =============================
     //    UV PREPROCESS SETUP
@@ -380,7 +417,6 @@ export class Renderer {
     device.queue.writeBuffer(this.simSizeBuffer, 0, simSizeData);
 
     // BIND GEOMETRY DATA
-
     this.domainSizeBindGroup_uvPre = device.createBindGroup({
       label: "domain size uvPre bg",
       layout: this.uvPre_Pipeline.getBindGroupLayout(0),
@@ -390,6 +426,17 @@ export class Renderer {
         { binding: 2, resource: { buffer: this.simSizeBuffer } },
         { binding: 3, resource: { buffer: this.circleGeomBuffer } },
         { binding: 4, resource: { buffer: this.segmentGeomBuffer } },
+      ],
+    });
+
+    // BIND GRID
+    this.gridBindGroup_uvPre = device.createBindGroup({
+      label: "grid bg",
+      layout: this.uvPre_Pipeline.getBindGroupLayout(2),
+      entries: [
+        { binding: 0, resource: { buffer: this.gridResBuffer} },
+        { binding: 1, resource: { buffer: this.gridCellsBuffer} },
+        { binding: 2, resource: { buffer: this.gridIndicesBuffer} }
       ],
     });
 
@@ -456,6 +503,16 @@ export class Renderer {
       entries: [
         { binding: 0, resource: { buffer: this.uvBuffer } },
         { binding: 1, resource: { buffer: this.wosValuesBuffer } },
+      ],
+    });
+
+    this.gridBindGroup_compute = device.createBindGroup({
+      label: "grid bg wos",
+      layout: this.wos_pipeline.getBindGroupLayout(2),
+      entries: [
+        { binding: 0, resource: { buffer: this.gridResBuffer} },
+        { binding: 1, resource: { buffer: this.gridCellsBuffer} },
+        { binding: 2, resource: { buffer: this.gridIndicesBuffer} }
       ],
     });
 
@@ -556,6 +613,7 @@ export class Renderer {
     uvPreComputePass.setPipeline(this.uvPre_Pipeline);
     uvPreComputePass.setBindGroup(0, this.domainSizeBindGroup_uvPre);
     uvPreComputePass.setBindGroup(1, this.uvBindGroup_uvPre);
+    uvPreComputePass.setBindGroup(2, this.gridBindGroup_uvPre);
     const wgSize_Pre = 8;
     const dispatchX_Pre = Math.ceil(this.simRes[0] / wgSize_Pre);
     const dispatchY_Pre = Math.ceil(this.simRes[1] / wgSize_Pre);
@@ -574,6 +632,7 @@ export class Renderer {
     wosComputePass.setPipeline(this.wos_pipeline);
     wosComputePass.setBindGroup(0, this.domainSizeBindGroup_wos);
     wosComputePass.setBindGroup(1, this.uvBindGroup_compute);
+    wosComputePass.setBindGroup(2, this.gridBindGroup_compute);
     const wgSize = 8;
     const dispatchX_wos = Math.ceil(this.simRes[0] / wgSize);
     const dispatchY_wos = Math.ceil(this.simRes[1] / wgSize);

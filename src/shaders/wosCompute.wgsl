@@ -27,6 +27,9 @@ struct Segment {
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 @group(1) @binding(1) var<storage, read_write> wos_valueList: array<f32>;
 
+@group(2) @binding(0) var<uniform> gridRes: vec2u;
+@group(2) @binding(1) var<storage> gridCells: array<u32>;
+@group(2) @binding(2) var<storage> gridGeoms: array<u32>;
 
 
 fn distanceToSegment(worldPos: vec2f, segment: Segment) -> f32 {
@@ -62,38 +65,74 @@ fn distanceToBoundaryWoS(pos: vec2f) -> vec2f {
         min(pos.y - simTL.y, simBR.y - pos.y)
     );
 
-    var circleDistFinal = length(pos - circles[0].center) - circles[0].radius;
-    var circlebValFinal = circles[0].boundary_value;
+    // NAIVE BOUNDARY CHECKS
+    // var circleDistFinal = length(pos - circles[0].center) - circles[0].radius;
+    // var circlebValFinal = circles[0].boundary_value;
+    // for (var i = 1u; i < arrayLength(&circles); i++) {
+    //     let curDist = length(pos - circles[i].center) - circles[i].radius;
+    //     if curDist < circleDistFinal {
+    //         circleDistFinal = curDist;
+    //         circlebValFinal = circles[i].boundary_value;
+    //     }
+    // }
+    // var segmentDistFinal = distanceToSegment(pos, segments[0]);
+    // var segmentbValFinal = segments[0].boundary_value;
+    // for (var i = 1u; i < arrayLength(&segments); i++) {
+    //     let curDist = distanceToSegment(pos, segments[i]);
+    //     if curDist < segmentDistFinal {
+    //         segmentDistFinal = curDist;
+    //         segmentbValFinal = segments[i].boundary_value;
+    //     }
+    // }
+    // var result = vec2f(circleDistFinal, circlebValFinal);
+    // if boxDist < circleDistFinal && boxDist < segmentDistFinal {
+    //     result[0] = boxDist;
+    //     result[1] = 0.0;
+    // }
+    // if segmentDistFinal < circleDistFinal && segmentDistFinal < boxDist {
+    //     result[0] = segmentDistFinal;
+    //     result[1] = segmentbValFinal;
+    // }
+
+    // GRID BOUNDARY CHECKS
+    let normalizedPos = (pos - simTL) / simSize;
+    let gridPos = vec2u(
+        u32(clamp(normalizedPos.x, 0.0, 0.9999) * f32(gridRes.x)),
+        u32(clamp(normalizedPos.y, 0.0, 0.9999) * f32(gridRes.y))
+    );
 
 
-    for (var i = 1u; i < arrayLength(&circles); i++) {
-        let curDist = length(pos - circles[i].center) - circles[i].radius;
-        if curDist < circleDistFinal {
-            circleDistFinal = curDist;
-            circlebValFinal = circles[i].boundary_value;
+    let gridCellIdx = gridPos.y * gridRes.x + gridPos.x;
+    let cellStartIdx = gridCells[gridCellIdx * 2u];
+    let cellCount = gridCells[gridCellIdx * 2u + 1u];
+
+    var geoDist = 1e10;
+    var geoValue = circles[0].boundary_value;
+    for (var i = 0u; i < cellCount; i++) {
+        let boundaryIdx = cellStartIdx + i;
+        let geomType = gridGeoms[boundaryIdx * 2u];
+        let geomIndex = gridGeoms[boundaryIdx * 2u + 1u];
+        var dist: f32;
+        var bVal: f32;
+
+        if (geomType == 0u) {
+            dist = length(pos - circles[geomIndex].center) - circles[geomIndex].radius;
+            bVal = circles[geomIndex].boundary_value;
+        } else {
+            dist = distanceToSegment(pos, segments[geomIndex]);
+            bVal = segments[geomIndex].boundary_value;
+        }
+
+        if (dist < geoDist) {
+            geoDist = dist;
+            geoValue = bVal;
         }
     }
 
-
-    var segmentDistFinal = distanceToSegment(pos, segments[0]);
-    var segmentbValFinal = segments[0].boundary_value;
-    for (var i = 1u; i < arrayLength(&segments); i++) {
-        let curDist = distanceToSegment(pos, segments[i]);
-        if curDist < segmentDistFinal {
-            segmentDistFinal = curDist;
-            segmentbValFinal = segments[i].boundary_value;
-        }
-    }
-
-    var result = vec2f(circleDistFinal, circlebValFinal);
-    if boxDist < circleDistFinal && boxDist < segmentDistFinal {
+    var result = vec2f(geoDist, geoValue);
+    if (boxDist < geoDist) {
         result[0] = boxDist;
         result[1] = 0.0;
-    }
-
-    if segmentDistFinal < circleDistFinal && segmentDistFinal < boxDist {
-        result[0] = segmentDistFinal;
-        result[1] = segmentbValFinal;
     }
 
     return result;
@@ -121,7 +160,6 @@ fn walkOnSpheres(startPos: vec2f, rngState: ptr<function, u32>) -> f32 {
 
     return temp;
 }
-
 
 // WALK ON STARS
 fn dTBDirichlet(pos: vec2f, texSize: vec2u) -> vec2f {
@@ -184,7 +222,6 @@ fn sampleHemisphere(normal: vec2f, rngState: ptr<function, u32>) -> f32 {
     }
     return angle;
 }
-
 
 fn walkOnStars(startPos: vec2f, texSize: vec2u, rngState: ptr<function, u32>) -> f32 {
     var pos = startPos;
