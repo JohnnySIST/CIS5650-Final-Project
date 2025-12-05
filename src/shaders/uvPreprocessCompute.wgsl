@@ -17,9 +17,9 @@ struct Segment {
 @group(0) @binding(3) var<storage> circles: array<Circle>;
 @group(0) @binding(4) var<storage> segments: array<Segment>;
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
-@group(2) @binding(0) var<uniform> gridRes: vec2u;
-@group(2) @binding(1) var<storage> gridCells: array<u32>;
-@group(2) @binding(2) var<storage> gridGeoms: array<u32>;
+// @group(2) @binding(0) var<uniform> gridRes: vec2u;
+// @group(2) @binding(1) var<storage> gridCells: array<u32>;
+// @group(2) @binding(2) var<storage> gridGeoms: array<u32>;
 
 fn distanceToSegment(worldPos: vec2f, segment: Segment) -> f32 {
     let AB = segment.end - segment.start;
@@ -49,43 +49,43 @@ fn distanceToBoundary(worldPos: vec2f) -> f32 {
 
 
     // NAIVE CHECKING ALL BOUNDARIES
-    // var circleDistFinal = length(worldPos - circles[0].center) - circles[0].radius;
-    // for (var i = 1u; i < arrayLength(&circles); i++) {
-    //     circleDistFinal = min(circleDistFinal, length(worldPos - circles[i].center) - circles[i].radius);
-    // }
-
-    // var segmentDistFinal = distanceToSegment(worldPos, segments[0]);
-    // for (var i = 1u; i < arrayLength(&segments); i++) {
-    //     segmentDistFinal = min(segmentDistFinal, distanceToSegment(worldPos, segments[i]));
-    // }
-
-    // CHECK BOUNDARY USING DA GRID :D
-    let normalizedPos = (worldPos - simTL) / simSize;
-    let gridPos = vec2u(
-        u32(clamp(normalizedPos.x, 0.0, 0.9999) * f32(gridRes.x)),
-        u32(clamp(normalizedPos.y, 0.0, 0.9999) * f32(gridRes.y))
-    );
-
-    let gridCellIdx = gridPos.y * gridRes.x + gridPos.x;
-    let cellStartIdx = gridCells[gridCellIdx * 2u];
-    let cellCount = gridCells[gridCellIdx * 2u + 1u];
-
-    var geoDist = length(worldPos - circles[0].center) - circles[0].radius;
-    for (var i = cellStartIdx; i < cellStartIdx + cellCount; i++) {
-        let geomType = gridGeoms[i * 2u]; // 0 is circle : 1 is segment
-        let geomIndex = gridGeoms[i * 2u + 1u];
-
-        if geomType == 0u {
-            let dist = length(worldPos - circles[geomIndex].center) - circles[geomIndex].radius;
-            geoDist = min(geoDist, dist);
-        } else {
-            let dist = distanceToSegment(worldPos, segments[geomIndex]);
-            geoDist = min(geoDist, dist);
-        }
+    var circleDistFinal = length(worldPos - circles[0].center) - circles[0].radius;
+    for (var i = 1u; i < arrayLength(&circles); i++) {
+        circleDistFinal = min(circleDistFinal, length(worldPos - circles[i].center) - circles[i].radius);
     }
 
-    //return min(min(boxDist, circleDistFinal), segmentDistFinal);
-    return min(boxDist, geoDist);
+    var segmentDistFinal = distanceToSegment(worldPos, segments[0]);
+    for (var i = 1u; i < arrayLength(&segments); i++) {
+        segmentDistFinal = min(segmentDistFinal, distanceToSegment(worldPos, segments[i]));
+    }
+
+    // CHECK BOUNDARY USING DA GRID :D
+    // let normalizedPos = (worldPos - simTL) / simSize;
+    // let gridPos = vec2u(
+    //     u32(clamp(normalizedPos.x, 0.0, 0.9999) * f32(gridRes.x)),
+    //     u32(clamp(normalizedPos.y, 0.0, 0.9999) * f32(gridRes.y))
+    // );
+
+    // let gridCellIdx = gridPos.y * gridRes.x + gridPos.x;
+    // let cellStartIdx = gridCells[gridCellIdx * 2u];
+    // let cellCount = gridCells[gridCellIdx * 2u + 1u];
+
+    // var geoDist = length(worldPos - circles[0].center) - circles[0].radius;
+    // for (var i = cellStartIdx; i < cellStartIdx + cellCount; i++) {
+    //     let geomType = gridGeoms[i * 2u]; // 0 is circle : 1 is segment
+    //     let geomIndex = gridGeoms[i * 2u + 1u];
+
+    //     if geomType == 0u {
+    //         let dist = length(worldPos - circles[geomIndex].center) - circles[geomIndex].radius;
+    //         geoDist = min(geoDist, dist);
+    //     } else {
+    //         let dist = distanceToSegment(worldPos, segments[geomIndex]);
+    //         geoDist = min(geoDist, dist);
+    //     }
+    // }
+
+    return min(min(boxDist, circleDistFinal), segmentDistFinal);
+    //return min(boxDist, geoDist);
 }
 
 @compute @workgroup_size(8, 8)
