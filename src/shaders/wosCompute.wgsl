@@ -210,7 +210,7 @@ fn distanceToBoundaryWoS(pos: vec2f) -> vec2f {
     let magic = bvhGeo[0];
     let moreMagic = bvhNodes[0];
     
-    var result = queryBVH(pos);//naiveClosestPoint(pos);
+    var result = queryBVH(pos);//naiveClosestPoint(pos);//
     if (boxDist < result[0]) {
         result[0] = boxDist;
         result[1] = 0.0;
@@ -449,7 +449,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     var seed = coords.x * 747796405u + coords.y * 2891336453u * totalWalks;
 
     for (var i = 0u; i < numWalks; i++) {
-        let temp = walkOnStars(worldPos, &seed);//walkOnSpheres(worldPos, &seed);//
+        let temp = walkOnSpheres(worldPos, &seed);//walkOnStars(worldPos, &seed);//
         totalTemp += temp;
     }
 

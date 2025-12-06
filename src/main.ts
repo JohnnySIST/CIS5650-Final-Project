@@ -60,9 +60,9 @@ class PCBEditor {
     this.canvas = canvas;
     this.simRes = [canvas.width, canvas.height];
     // this.simTL = [-1, -1];
-    this.simTL = [120, 90];
+    this.simTL = [70, 50]; // [120, 90]
     // this.simSize = [2, 2];
-    this.simSize = [60, 60];
+    this.simSize = [160, 100]; // [60, 60]
     this.viewRes = [canvas.width, canvas.height];
     // this.viewTL = [-1, -1];
     this.viewTL = this.simTL; // [0, 0];

@@ -1,7 +1,7 @@
 struct Circle {
     center: vec2f,
     radius: f32,
-    boundary_value: f32 // ASSUME DIRCHLE BOUNDARY FOR NOW 
+    boundary_value: f32
 }
 
 struct Segment {
@@ -77,7 +77,7 @@ fn queryBVH(pos: vec2f) -> vec2f {
   
   while (stack_ptr >= 0) {
     iterations += 1u;
-    if (iterations > 200u) { break; } // Safety
+    if (iterations > 200u) { break; }
     
     let node_idx = stack[u32(stack_ptr)];
     stack_ptr -= 1;
@@ -86,14 +86,14 @@ fn queryBVH(pos: vec2f) -> vec2f {
     
     let node = bvhNodes[node_idx];
     
-    // CRITICAL: Early exit if bbox is farther than current best
+    // PRUNE FAR SUBTREES
     let bbox_dist = distanceToAABB(pos, node.bbox_min, node.bbox_max);
     if (bbox_dist > abs(closest_dist)) {
       continue;
     }
     
     if (node.is_leaf == 1u) {
-      // Test geometries in leaf
+      // TEST FOR LEAF
       for (var i = 0u; i < node.geom_count; i++) {
         let geom_idx = node.geom_start + i;
         if (geom_idx >= arrayLength(&bvhGeo)) { break; }
@@ -115,14 +115,14 @@ fn queryBVH(pos: vec2f) -> vec2f {
           bVal = segment.boundary_value;
         }
         
-        // Update closest (use abs for signed distance)
+        // UPDATE CLOSEST POINT
         if (dist < closest_dist) {
           closest_dist = dist;
           closest_boundary_value = bVal;
         }
       }
     } else {
-      // Interior node - push children if they might be closer
+        // RECURSE ON CHILDREN
         if (node.left_child != 0xFFFFFFFFu && node.left_child < arrayLength(&bvhNodes) && stack_ptr < 30) {
             let left_node = bvhNodes[node.left_child];
             let left_bbox_dist = distanceToAABB(pos, left_node.bbox_min, left_node.bbox_max);
@@ -158,7 +158,6 @@ fn distanceToBoundary(worldPos: vec2f) -> f32 {
         min(worldPos.y - simTL.y, simBR.y - worldPos.y)
     );
 
-
     // NAIVE CHECKING ALL BOUNDARIES
     // var circleDistFinal = length(worldPos - circles[0].center) - circles[0].radius;
     // for (var i = 1u; i < arrayLength(&circles); i++) {
@@ -169,9 +168,10 @@ fn distanceToBoundary(worldPos: vec2f) -> f32 {
     // for (var i = 1u; i < arrayLength(&segments); i++) {
     //     segmentDistFinal = min(segmentDistFinal, distanceToSegment(worldPos, segments[i]));
     // }
-    //return min(min(boxDist, circleDistFinal), segmentDistFinal);
+    // return min(min(boxDist, circleDistFinal), segmentDistFinal);
     //return min(boxDist, geoDist);
 
+   
     // BVH CHECK
     let bvhResult = queryBVH(worldPos);
     return min(boxDist, bvhResult[0]);
