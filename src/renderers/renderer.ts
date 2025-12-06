@@ -868,7 +868,7 @@ export class Renderer {
     // ===============================
     //    THIS RENDERS STUFF :)
     // ===============================
-
+    this.totalWalks = 0;
     requestAnimationFrame(() => this.frame(this.simUpdateId));
   }
 
