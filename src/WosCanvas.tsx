@@ -380,7 +380,10 @@ export default function WosCanvas({
 
   return (
     <>
-      {/* <div id="controls">
+      <div
+        id="controls"
+        style={{ position: "absolute", top: 0, left: 0, zIndex: 1000 }}
+      >
         <div
           id="trace-controls"
           style={{
@@ -444,10 +447,12 @@ export default function WosCanvas({
         >
           Export to KiCad
         </button>
-      </div> */}
+      </div>
       <div
         style={{
-          position: "relative",
+          position: "absolute",
+          top: 0,
+          left: 0,
           width: "100vw",
           height: "100vh",
           overflow: "hidden",
