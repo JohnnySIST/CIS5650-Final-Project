@@ -373,12 +373,20 @@ fn sampleHemisphere(normal: vec2f, rngState: ptr<function, u32>) -> vec2f {
     return vec2f(cos(worldAngle), sin(worldAngle));
 }
 
+fn greensFunctionBall2D(x: vec2f, y: vec2f, R: f32) -> f32 {
+    let r = length(y - x);
+    if (r < 0.0001) { return 0.0; }
+    return 0.15915494 * log(R / r);
+}
+
 fn walkOnStars(startPos: vec2f, rngState: ptr<function, u32>) -> f32 {
     var pos = startPos;
     var accumulatedFlux = 0.0;
     let epsilon = 0.08;
     let rMin = 0.08;
     let maxSteps = 20;
+    var onNeumann = false;
+    var neumannNorm = vec2f(0.0);
 
     // REMOVE THESE WHITH BVH REMOVEALL:
     let magic = bvhGeo[0];
@@ -386,35 +394,42 @@ fn walkOnStars(startPos: vec2f, rngState: ptr<function, u32>) -> f32 {
 
     for (var step = 0; step < maxSteps; step++) {
         let boundaryResult = dTBDirichlet(pos);
-        let dist = boundaryResult[0];
+        let dDist = boundaryResult[0];
         let temp = boundaryResult[1];
 
-        if dist < epsilon {
+        if dDist < epsilon {
             return temp + accumulatedFlux;
         }
 
         let n1 = dTBNeumann(pos);
-        let starRadius = min(dist, n1.dist) * 0.99;
+        let starRadius = max(rMin, min(dDist, n1.dist) * 0.99);
 
         var dir: vec2f;
-        if (n1.dist < dist && n1.dist < epsilon * 2.0) {
-            dir = sampleHemisphere(n1.normal, rngState);
+        if (onNeumann) {
+            dir = sampleHemisphere(neumannNorm, rngState);
         } else {
             let angle = randomFloat(rngState) * 6.28318530718;
             dir = vec2f(cos(angle), sin(angle));
         }
 
-
         let offset = pos + dir * starRadius;
-
         let n2 = dTBNeumann(offset);
 
         if (n1.dist * n2.dist < 0.0) {
-            pos = pos + dir * n1.dist * 0.99;
-            dir = sampleHemisphere(n1.normal, rngState);
-            accumulatedFlux += n1.flux * n1.dist * 0.31831;
+            let nBoundaryPoint = pos + dir * n1.dist * 0.99;
+
+            if (abs(n1.flux) > 0.0001) {
+                let G = greensFunctionBall2D(pos, nBoundaryPoint, starRadius);
+                accumulatedFlux -= G * n1.flux;
+            }
+
+            pos = nBoundaryPoint;
+            onNeumann = true;
+            neumannNorm = n1.normal;
+
         } else {
             pos = offset;
+            onNeumann = false;
         }
     }
 
