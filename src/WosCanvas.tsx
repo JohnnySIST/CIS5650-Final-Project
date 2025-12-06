@@ -10,6 +10,15 @@ import "./style.css";
 
 import { parseKicadPcb, KicadPcb, FootprintPad, Segment } from "kicadts";
 
+function downloadFile(content: string, fileName: string, contentType: string) {
+  const a = document.createElement("a");
+  const file = new Blob([content], { type: contentType });
+  a.href = URL.createObjectURL(file);
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 type Vec2 = { x: number; y: number };
 type EditorMode = "select";
 interface EditorState {
@@ -27,18 +36,31 @@ export default function WosCanvas({
 
   const [traceWidth, setTraceWidth] = useState(5);
 
-  const [editorState, setEditorState] = useState<EditorState>({
-    mode: "select",
-    isPanning: false,
-  });
+  const [editorMode, setEditorMode] = useState<EditorMode>("select");
+  const [isPanning, setIsPanning] = useState(false);
+  const [isSelecting, setIsSelecting] = useState(false);
+
+  const [selectionStart, setSelectionStart] = useState<[number, number] | null>(
+    null
+  ); // world space
+  const [selectionEnd, setSelectionEnd] = useState<[number, number] | null>(
+    null
+  ); // world space
+
+  const [boardBoundsTL, setBoardBoundsTL] = useState<[number, number]>([
+    120, 90,
+  ]); // floats, world space
+  const [boardBoundsSize, setBoardBoundsSize] = useState<[number, number]>([
+    60, 60,
+  ]); // floats, world space
 
   const [simRes, setSimRes] = useState<[number, number]>(
     webgpuCanvasRef.current
       ? [webgpuCanvasRef.current.width, webgpuCanvasRef.current.height]
       : [1920, 1080]
   ); // integers, pixels
-  const [simTL, setSimTL] = useState<[number, number]>([120, 90]); // floats, world space
-  const [simSize, setSimSize] = useState<[number, number]>([60, 60]); // floats, world space
+  const [simTL, setSimTL] = useState<[number, number]>(boardBoundsTL); // floats, world space
+  const [simSize, setSimSize] = useState<[number, number]>(boardBoundsSize); // floats, world space
 
   const [viewRes, setViewRes] = useState<[number, number]>([
     webgpuCanvasRef.current ? webgpuCanvasRef.current.width : 1920,
@@ -58,21 +80,118 @@ export default function WosCanvas({
   const [selectedSegment, setSelectedSegment] = useState<Segment | null>(null);
   const [targetLayer, setTargetLayer] = useState("B.Cu");
 
-  function getMouseWorldPosition(e: MouseEvent): Vec2 {
+  function getWorldPositionFromCanvasUV(
+    canvasU: number,
+    canvasV: number
+  ): Vec2 {
+    const worldX = canvasU * viewSize[0] + viewTL[0];
+    const worldY = canvasV * viewSize[1] + viewTL[1];
+    return { x: worldX, y: worldY };
+  }
+
+  function scaleCanvasPositionToCanvasUV(
+    x: number,
+    y: number
+  ): { u: number; v: number } {
+    if (!webgpuCanvasRef.current) {
+      return { u: 0, v: 0 };
+    }
+    const rect = webgpuCanvasRef.current.getBoundingClientRect();
+    const canvasU = x / rect.width;
+    const canvasV = y / rect.height;
+    return { u: canvasU, v: canvasV };
+  }
+
+  function scaleCanvasUVToCanvasPosition(
+    u: number,
+    v: number
+  ): { x: number; y: number } {
     if (!webgpuCanvasRef.current) {
       return { x: 0, y: 0 };
     }
     const rect = webgpuCanvasRef.current.getBoundingClientRect();
+    const x = u * rect.width;
+    const y = v * rect.height;
+    return { x, y };
+  }
 
-    // 1. Get mouse position in canvas uv coordinates
+  function scaleCanvasUVToWorldPosition(
+    u: number,
+    v: number
+  ): { x: number; y: number } {
+    const worldX = u * viewSize[0];
+    const worldY = v * viewSize[1];
+    return { x: worldX, y: worldY };
+  }
+
+  function scaleWorldPositionToCanvasUV(
+    x: number,
+    y: number
+  ): { u: number; v: number } {
+    const canvasU = x / viewSize[0];
+    const canvasV = y / viewSize[1];
+    return { u: canvasU, v: canvasV };
+  }
+
+  function getCanvasUVFromEvent(e: MouseEvent): { u: number; v: number } {
+    if (!webgpuCanvasRef.current) {
+      return { u: 0, v: 0 };
+    }
+    const rect = webgpuCanvasRef.current.getBoundingClientRect();
     const canvasU = (e.clientX - rect.left) / rect.width;
     const canvasV = (e.clientY - rect.top) / rect.height;
+    return { u: canvasU, v: canvasV };
+  }
 
-    // 2. Convert from canvas coordinates to world coordinates
-    const worldX = canvasU * viewSize[0] + viewTL[0];
-    const worldY = canvasV * viewSize[1] + viewTL[1];
+  function getCanvasUVFromCanvasPosition(
+    x: number,
+    y: number
+  ): { u: number; v: number } {
+    if (!webgpuCanvasRef.current) {
+      return { u: 0, v: 0 };
+    }
+    const rect = webgpuCanvasRef.current.getBoundingClientRect();
+    const canvasU = (x - rect.left) / rect.width;
+    const canvasV = (y - rect.top) / rect.height;
+    return { u: canvasU, v: canvasV };
+  }
 
-    return { x: worldX, y: worldY };
+  function getMouseWorldPosition(e: MouseEvent): Vec2 {
+    const { u: canvasU, v: canvasV } = getCanvasUVFromEvent(e);
+    return getWorldPositionFromCanvasUV(canvasU, canvasV);
+  }
+
+  function getCanvasUVFromWorldPosition(
+    worldX: number,
+    worldY: number
+  ): { u: number; v: number } {
+    const canvasU = (worldX - viewTL[0]) / viewSize[0];
+    const canvasV = (worldY - viewTL[1]) / viewSize[1];
+    return { u: canvasU, v: canvasV };
+  }
+
+  function getCanvasPositionFromCanvasUV(
+    canvasU: number,
+    canvasV: number
+  ): { x: number; y: number } {
+    if (!webgpuCanvasRef.current) {
+      return { x: 0, y: 0 };
+    }
+    const rect = webgpuCanvasRef.current.getBoundingClientRect();
+    const x = canvasU * rect.width + rect.left;
+    const y = canvasV * rect.height + rect.top;
+    return { x, y };
+  }
+
+  function getCanvasPositionFromWorldPosition(
+    worldX: number,
+    worldY: number
+  ): { x: number; y: number } {
+    const { u: canvasU, v: canvasV } = getCanvasUVFromWorldPosition(
+      worldX,
+      worldY
+    );
+    return getCanvasPositionFromCanvasUV(canvasU, canvasV);
   }
 
   useEffect(() => {
@@ -94,7 +213,11 @@ export default function WosCanvas({
 
       const canvas = webgpuCanvasRef.current;
       const uiCanvas = uiCanvasRef.current;
-      assert(canvas !== null && uiCanvas !== null);
+      if (!canvas || !uiCanvas) {
+        const h = document.querySelector("#title") as HTMLElement;
+        h.innerText = "Canvas is not available.";
+        return;
+      }
       canvas.width = canvas.clientWidth;
       canvas.height = canvas.clientHeight;
       uiCanvas.width = canvas.width;
@@ -136,14 +259,14 @@ export default function WosCanvas({
 
       window.addEventListener("mouseup", (e) => {
         if (e.button === 1) {
-          setEditorState({ ...editorState, isPanning: false });
+          setIsPanning(false);
           canvas.style.cursor = "default";
         }
       });
 
       window.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
-          setEditorState({ ...editorState, mode: "select" });
+          setEditorMode("select");
         }
       });
     })();
@@ -205,6 +328,30 @@ export default function WosCanvas({
   }
 
   useEffect(() => {
+    if (!uiCanvasRef.current) return;
+    const ctx = uiCanvasRef.current.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, uiCanvasRef.current.width, uiCanvasRef.current.height);
+    if (isSelecting && selectionStart && selectionEnd) {
+      console.log("selectionStart", selectionStart);
+      console.log("selectionEnd", selectionEnd);
+      const p1 = getCanvasPositionFromWorldPosition(...selectionStart);
+      const p2 = getCanvasPositionFromWorldPosition(...selectionEnd);
+      ctx.save();
+      ctx.strokeStyle = "rgba(0,128,255,0.6)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(
+        Math.min(p1.x, p2.x),
+        Math.min(p1.y, p2.y),
+        Math.abs(p2.x - p1.x),
+        Math.abs(p2.y - p1.y)
+      );
+      ctx.restore();
+    }
+  }, [uiCanvasRef.current, selectionStart, selectionEnd]);
+
+  useEffect(() => {
     (async () => {
       await renderer?.updateParams({
         viewTL: viewTL,
@@ -216,20 +363,7 @@ export default function WosCanvas({
 
   useEffect(() => {
     refreshSimulation();
-  }, [renderer, pcbDesign]);
-
-  function downloadFile(
-    content: string,
-    fileName: string,
-    contentType: string
-  ) {
-    const a = document.createElement("a");
-    const file = new Blob([content], { type: contentType });
-    a.href = URL.createObjectURL(file);
-    a.download = fileName;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
+  }, [renderer, pcbDesign, simTL, simSize]);
 
   const updateTraceWidth = (width: number) => {
     setTraceWidth(width);
@@ -246,7 +380,7 @@ export default function WosCanvas({
 
   return (
     <>
-      <div id="controls">
+      {/* <div id="controls">
         <div
           id="trace-controls"
           style={{
@@ -310,7 +444,7 @@ export default function WosCanvas({
         >
           Export to KiCad
         </button>
-      </div>
+      </div> */}
       <div
         style={{
           position: "relative",
@@ -320,6 +454,17 @@ export default function WosCanvas({
         }}
       >
         <canvas
+          id="webgpu-canvas"
+          ref={webgpuCanvasRef}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            zIndex: 1,
+            pointerEvents: "none",
+          }}
+        />
+        <canvas
           id="ui-canvas"
           ref={uiCanvasRef}
           style={{
@@ -327,16 +472,10 @@ export default function WosCanvas({
             left: 0,
             top: 0,
             zIndex: 2,
-            pointerEvents: "none",
           }}
-        />
-        <canvas
-          id="webgpu-canvas"
-          ref={webgpuCanvasRef}
-          style={{ position: "absolute", left: 0, top: 0, zIndex: 1 }}
           onClick={(e) => {
             const clickPos = getMouseWorldPosition(e.nativeEvent);
-            switch (editorState.mode) {
+            switch (editorMode) {
               case "select":
                 if (!pcbDesign) {
                   return;
@@ -461,18 +600,28 @@ export default function WosCanvas({
             setViewTL([viewTL[0] - dx, viewTL[1] - dy]);
           }}
           onMouseMove={(e) => {
-            if (editorState.isPanning) {
+            if (isPanning) {
               // We need to scale the movement by the canvas's CSS vs internal resolution
               // to ensure 1:1 panning at any display size.
-              if (!uiCanvasRef.current) {
+              if (!uiCanvasRef.current || !webgpuCanvasRef.current) {
                 return;
               }
-              const rect = uiCanvasRef.current.getBoundingClientRect();
 
-              setViewTL([
-                viewTL[0] - (e.movementX / rect.width) * viewSize[0],
-                viewTL[1] - (e.movementY / rect.height) * viewSize[1],
-              ]);
+              const uvMove = scaleCanvasPositionToCanvasUV(
+                e.movementX,
+                e.movementY
+              );
+
+              const worldMove = scaleCanvasUVToWorldPosition(
+                uvMove.u,
+                uvMove.v
+              );
+
+              setViewTL([viewTL[0] - worldMove.x, viewTL[1] - worldMove.y]);
+            }
+            if (isSelecting) {
+              const newSelectionEnd = getMouseWorldPosition(e.nativeEvent);
+              setSelectionEnd([newSelectionEnd.x, newSelectionEnd.y]);
             }
           }}
           onMouseDown={(e) => {
@@ -481,9 +630,57 @@ export default function WosCanvas({
               if (!uiCanvasRef.current) {
                 return;
               }
-              setEditorState({ ...editorState, isPanning: true });
+              setIsPanning(true);
               uiCanvasRef.current.style.cursor = "grabbing";
               e.preventDefault();
+            } else if (e.button === 0) {
+              if (!uiCanvasRef.current) {
+                return;
+              }
+              setIsSelecting(true);
+              const worldPos = getMouseWorldPosition(e.nativeEvent);
+              const newSelectionStart: [number, number] = [
+                worldPos.x,
+                worldPos.y,
+              ];
+              const newSelectionEnd: [number, number] = [...newSelectionStart];
+              setSelectionStart(newSelectionStart);
+              setSelectionEnd(newSelectionEnd);
+            }
+          }}
+          onMouseUp={(e) => {
+            if (e.button === 1) {
+              if (!uiCanvasRef.current) {
+                return;
+              }
+              setIsPanning(false);
+              uiCanvasRef.current.style.cursor = "default";
+            } else if (e.button === 0) {
+              if (!uiCanvasRef.current) {
+                return;
+              }
+              setIsSelecting(false);
+              if (selectionStart && selectionEnd) {
+                const x1 = selectionStart[0] * viewSize[0] + viewTL[0];
+                const y1 = selectionStart[1] * viewSize[1] + viewTL[1];
+                const x2 = selectionEnd[0] * viewSize[0] + viewTL[0];
+                const y2 = selectionEnd[1] * viewSize[1] + viewTL[1];
+                const minX = Math.min(x1, x2);
+                const minY = Math.min(y1, y2);
+                const maxX = Math.max(x1, x2);
+                const maxY = Math.max(y1, y2);
+                const width = maxX - minX;
+                const height = maxY - minY;
+                setSimTL([minX, minY]);
+                setSimSize([width, height]);
+                if (width < 10 || height < 10) {
+                  setSelectionStart(null);
+                  setSelectionEnd(null);
+                }
+
+                setSelectionStart(null);
+                setSelectionEnd(null);
+              }
             }
           }}
         />

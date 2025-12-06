@@ -103,7 +103,7 @@ fn distanceToBoundaryWoS(pos: vec2f) -> vec2f {
 fn walkOnSpheres(startPos: vec2f, rngState: ptr<function, u32>) -> f32 {
     var pos = startPos;
     var temp = 0.0;
-    let epsilon = 0.001; // was 2.0
+    let epsilon = 2.1; // was 2.0
     let maxSteps = 100;
 
     for (var step = 0; step < maxSteps; step++) {
