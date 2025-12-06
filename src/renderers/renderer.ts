@@ -477,6 +477,8 @@ export class Renderer {
   }
 
   async updateParams({
+    boardTL,
+    boardSize,
     simRes,
     simTL,
     simSize,
@@ -484,6 +486,8 @@ export class Renderer {
     viewTL,
     viewSize,
   }: {
+    boardTL?: [number, number];
+    boardSize?: [number, number];
     simRes?: [number, number];
     simTL?: [number, number];
     simSize?: [number, number];
@@ -493,6 +497,19 @@ export class Renderer {
   }) {
     const device = this.device;
     const canvas = this.canvas;
+    if (boardTL) {
+      this.boardTL = boardTL;
+      const boardTLData = new Float32Array([this.boardTL[0], this.boardTL[1]]);
+      device.queue.writeBuffer(this.boardTLBuffer, 0, boardTLData);
+    }
+    if (boardSize) {
+      this.boardSize = boardSize;
+      const boardSizeData = new Float32Array([
+        this.boardSize[0],
+        this.boardSize[1],
+      ]);
+      device.queue.writeBuffer(this.boardSizeBuffer, 0, boardSizeData);
+    }
     if (simRes) {
       this.simRes = simRes;
       const simResData = new Uint32Array([this.simRes[0], this.simRes[1]]);

@@ -46,20 +46,13 @@ export default function WosCanvas({
     null
   ); // world space
 
-  const [boardBoundsTL, setBoardBoundsTL] = useState<[number, number]>([
-    120, 90,
-  ]); // floats, world space
-  const [boardBoundsSize, setBoardBoundsSize] = useState<[number, number]>([
-    60, 60,
-  ]); // floats, world space
-
   const [simRes, setSimRes] = useState<[number, number]>(
     webgpuCanvasRef.current
       ? [webgpuCanvasRef.current.width, webgpuCanvasRef.current.height]
       : [1920, 1080]
   ); // integers, pixels
-  const [simTL, setSimTL] = useState<[number, number]>(boardBoundsTL); // floats, world space
-  const [simSize, setSimSize] = useState<[number, number]>(boardBoundsSize); // floats, world space
+  const [simTL, setSimTL] = useState<[number, number]>([120, 90]); // floats, world space
+  const [simSize, setSimSize] = useState<[number, number]>([60, 60]); // floats, world space
 
   // const [viewRes, setViewRes] = useState<[number, number]>([
   //   webgpuCanvasRef.current ? webgpuCanvasRef.current.width : 1920,
@@ -72,8 +65,8 @@ export default function WosCanvas({
   const [viewTL, setViewTL] = useState<[number, number]>(simTL); // floats, world space
   const [viewSize, setViewSize] = useState<[number, number]>(simSize); // floats, world space
 
-  const [boardTL, setBoardTL] = useState<[number, number]>([120, 90]); // floats, world space
-  const [boardSize, setBoardSize] = useState<[number, number]>([60, 60]); // floats, world space
+  // const [boardTL, setBoardTL] = useState<[number, number]>(); // floats, world space
+  // const [boardSize, setBoardSize] = useState<[number, number]>(); // floats, world space
 
   const [renderer, setRenderer] = useState<Renderer | null>(null);
 
@@ -299,15 +292,39 @@ export default function WosCanvas({
     })();
   }, [webgpuCanvasRef.current, uiCanvasRef.current]);
 
-  async function refreshSimulation() {
-    console.log("Refreshing simulation");
-    if (!renderer || !pcbDesign) {
-      console.log("Renderer", renderer);
-      console.log("PCB Design", pcbDesign);
-      return;
-    }
-    console.log("Refreshing simulation 2");
-    const drawAbleFootprintPads = pcbDesign.footprints.flatMap((footprint) => {
+  const edgeCutSegments = pcbDesign?.graphicLines.filter((line) => {
+    return line.layer?.names.some((layer) => {
+      return makeRegexFromWildcardString(layer).test("Edge.Cuts");
+    });
+  });
+
+  const boardTL: [number, number] = edgeCutSegments?.reduce(
+    (acc, line) => {
+      return [
+        Math.min(acc[0], line.startPoint?.x || Number.POSITIVE_INFINITY),
+        Math.min(acc[1], line.startPoint?.y || Number.POSITIVE_INFINITY),
+      ];
+    },
+    [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY]
+  ) ?? [120, 90];
+
+  const boardBR: [number, number] = edgeCutSegments?.reduce(
+    (acc, line) => {
+      return [
+        Math.max(acc[0], line.endPoint?.x || Number.NEGATIVE_INFINITY),
+        Math.max(acc[1], line.endPoint?.y || Number.NEGATIVE_INFINITY),
+      ];
+    },
+    [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY]
+  ) ?? [180, 150];
+
+  const boardSize: [number, number] = [
+    boardBR[0] - boardTL[0],
+    boardBR[1] - boardTL[1],
+  ];
+
+  const drawAbleFootprintPads =
+    pcbDesign?.footprints.flatMap((footprint) => {
       return footprint.fpPads
         .filter((pad) => {
           return (
@@ -324,32 +341,42 @@ export default function WosCanvas({
             radius: (pad.size?.height || 0) / 2,
           };
         });
-    });
+    }) ?? [];
 
-    const drawAbleSegments = pcbDesign.segments.filter((segment) => {
+  const renderCircles: RenderCircle[] = drawAbleFootprintPads.map((pad) => {
+    return {
+      center: [pad.x, pad.y],
+      radius: pad.radius,
+      boundary_value: Math.random(),
+    };
+  });
+
+  const drawAbleSegments =
+    pcbDesign?.segments.filter((segment) => {
       return segment.layer?.names.some((layer) => {
         return makeRegexFromWildcardString(layer).test(targetLayer);
       });
-    });
+    }) ?? [];
 
-    const renderCircles: RenderCircle[] = drawAbleFootprintPads.map((pad) => {
-      return {
-        center: [pad.x, pad.y],
-        radius: pad.radius,
-        boundary_value: Math.random(),
-      };
-    });
-    // console.log("Found pads:", drawAbleFootprintPads);
+  const renderSegments: RenderSegment[] = drawAbleSegments.map((segment) => {
+    return {
+      start: [segment.startPoint?.x || 0, segment.startPoint?.y || 0],
+      end: [segment.endPoint?.x || 0, segment.endPoint?.y || 0],
+      widthRadius: (segment.width || 0) / 2,
+      boundary_value: Math.random(),
+    };
+  });
 
-    const renderSegments: RenderSegment[] = drawAbleSegments.map((segment) => {
-      return {
-        start: [segment.startPoint?.x || 0, segment.startPoint?.y || 0],
-        end: [segment.endPoint?.x || 0, segment.endPoint?.y || 0],
-        widthRadius: (segment.width || 0) / 2,
-        boundary_value: Math.random(),
-      };
-    });
-    // console.log("Found segments:", drawAbleSegments);
+  async function refreshSimulation() {
+    console.log("Refreshing simulation");
+    if (!renderer || !pcbDesign) {
+      console.log("Renderer", renderer);
+      console.log("PCB Design", pcbDesign);
+      return;
+    }
+    console.log("Refreshing simulation 2");
+    console.log("Found pads:", drawAbleFootprintPads);
+    console.log("Found segments:", drawAbleSegments);
 
     await renderer.setCircles(renderCircles, renderSegments);
   }
@@ -377,24 +404,28 @@ export default function WosCanvas({
   }, [uiCanvasRef.current, selectionStart, selectionEnd, isSelecting]);
 
   useEffect(() => {
-    (async () => {
-      await renderer?.updateParams({
-        viewTL: viewTL,
-        viewSize: viewSize,
-      });
-    })();
+    renderer?.updateParams({
+      viewTL: viewTL,
+      viewSize: viewSize,
+    });
     console.log("Updated renderer");
   }, [renderer, viewTL, viewSize]);
 
   useEffect(() => {
-    (async () => {
-      await renderer?.updateParams({
-        simTL: simTL,
-        simSize: simSize,
-      });
-    })();
+    renderer?.updateParams({
+      simTL: simTL,
+      simSize: simSize,
+    });
     console.log("Updated renderer", simTL, simSize);
   }, [renderer, simTL, simSize]);
+
+  useEffect(() => {
+    renderer?.updateParams({
+      boardTL: boardTL,
+      boardSize: boardSize,
+    });
+    console.log("Updated renderer", boardTL, boardSize);
+  }, [renderer, boardTL, boardSize]);
 
   useEffect(() => {
     refreshSimulation();
@@ -711,8 +742,12 @@ export default function WosCanvas({
                 const maxY = Math.max(selectionStart[1], selectionEnd[1]);
                 const width = maxX - minX;
                 const height = maxY - minY;
-                console.log("Selected area:", minX, minY, width, height);
-                if (width < 0.1 || height < 0.1) {
+                console.log("Selected area:", minX, minY, width, width);
+                const canvasUVArea = scaleWorldPositionToCanvasUV(
+                  width,
+                  height
+                );
+                if (canvasUVArea.u < 0.01 || canvasUVArea.v < 0.01) {
                   setSimTL(boardTL);
                   setSimSize(boardSize);
                 } else {

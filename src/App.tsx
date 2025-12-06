@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import WosCanvas from "./WosCanvas";
 import FpsBadge from "./FpsBadge";
 import ToggleSwitch from "./ToggleSwitch";
@@ -6,9 +6,9 @@ import ToggleSwitch from "./ToggleSwitch";
 export default function App() {
   const [fps, setFps] = useState(0);
 
-  function fpsCallback(fps: number) {
+  const fpsCallback = useCallback((fps: number) => {
     setFps(fps);
-  }
+  }, []);
 
   return (
     <>
