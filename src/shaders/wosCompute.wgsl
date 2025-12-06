@@ -38,9 +38,11 @@ struct BVHNode {
 @group(0) @binding(0) var<uniform> simRes: vec2u;
 @group(0) @binding(1) var<uniform> simTL: vec2f;
 @group(0) @binding(2) var<uniform> simSize: vec2f;
-@group(0) @binding(3) var<uniform> totalWalks: u32;
-@group(0) @binding(4) var<storage> circles: array<Circle>;
-@group(0) @binding(5) var<storage> segments: array<Segment>;
+@group(0) @binding(3) var<uniform> boardTL: vec2f;
+@group(0) @binding(4) var<uniform> boardSize: vec2f;
+@group(0) @binding(5) var<uniform> totalWalks: u32;
+@group(0) @binding(6) var<storage> circles: array<Circle>;
+@group(0) @binding(7) var<storage> segments: array<Segment>;
 
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 @group(1) @binding(1) var<storage, read_write> wos_valueList: array<f32>;
@@ -197,11 +199,11 @@ fn naiveClosestPoint(pos: vec2f) -> vec2f {
 
 // REGULAR WoS
 fn distanceToBoundaryWoS(pos: vec2f) -> vec2f {
-    let simBR = simTL + simSize;
+    let boardBR = boardTL + boardSize;
 
     let boxDist = min(
-        min(pos.x - simTL.x, simBR.x - pos.x),
-        min(pos.y - simTL.y, simBR.y - pos.y)
+        min(pos.x - boardTL.x, boardBR.x - pos.x),
+        min(pos.y - boardTL.y, boardBR.y - pos.y)
     );
 
     let magic = bvhGeo[0];
@@ -308,20 +310,20 @@ fn distanceToSegmentNeumann(worldPos: vec2f, segment: Segment) -> NeumannHit {
 }
 
 fn dTBNeumann(pos: vec2f) -> NeumannHit {
-    let simBR = simTL + simSize;
+    let boardBR = boardTL + boardSize;
     let flux = 0.0; // BOUNDARY FLUX 0 
 
-    let dLeft = pos.x - simTL.x;
-    let dRight = simBR.x - pos.x;
-    let dBottom = pos.y - simTL.y;
-    let dTop = simBR.y - pos.y;
+    let dLeft = pos.x - boardTL.x;
+    let dRight = boardBR.x - pos.x;
+    let dBottom = pos.y - boardTL.y;
+    let dTop = boardBR.y - pos.y;
 
     let boxDist = min(
-        min(pos.x - simTL.x, simBR.x - pos.x),
-        min(pos.y - simTL.y, simBR.y - pos.y)
+        min(dLeft, dRight),
+        min(dBottom, dTop)
     );
 
-    let center = simTL + simBR * 0.5;
+    let center = boardTL + boardBR * 0.5;
     var boxNormal = vec2f(0.0);
     if abs(((pos - center)).x) > abs((pos - center).y) {
         let x = ((pos - center).x) / abs((pos - center).x);

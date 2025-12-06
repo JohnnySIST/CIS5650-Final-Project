@@ -1,11 +1,13 @@
 @group(0) @binding(0) var<uniform> simRes: vec2u;
 @group(0) @binding(1) var<uniform> simTL: vec2f;
 @group(0) @binding(2) var<uniform> simSize: vec2f;
-@group(0) @binding(3) var<uniform> viewRes: vec2u;
-@group(0) @binding(4) var<uniform> viewTL: vec2f;
-@group(0) @binding(5) var<uniform> viewSize: vec2f;
-@group(0) @binding(6) var<uniform> totalWalks: u32;
-@group(0) @binding(7) var<uniform> minMaxBVals: vec2f;
+@group(0) @binding(3) var<uniform> boardTL: vec2f;
+@group(0) @binding(4) var<uniform> boardSize: vec2f;
+@group(0) @binding(5) var<uniform> viewRes: vec2u;
+@group(0) @binding(6) var<uniform> viewTL: vec2f;
+@group(0) @binding(7) var<uniform> viewSize: vec2f;
+@group(0) @binding(8) var<uniform> totalWalks: u32;
+@group(0) @binding(9) var<uniform> minMaxBVals: vec2f;
 
 // @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 @group(1) @binding(0) var<storage, read_write> wos_valueList: array<f32>;
@@ -37,8 +39,15 @@ fn fragMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let simBR = simTL + simSize;
     let inSim = worldPos.x >= simTL.x && worldPos.x <= simBR.x && worldPos.y >= simTL.y && worldPos.y <= simBR.y;
 
-    if !inSim {
+    let boardBR = boardTL + boardSize;
+    let inBoard = worldPos.x >= boardTL.x && worldPos.x <= boardBR.x && worldPos.y >= boardTL.y && worldPos.y <= boardBR.y;
+
+    if !inBoard {
         return vec4f(0.0, 0.0, 0.0, 1.0);
+    }
+
+    if !inSim {
+        return vec4f(0.5, 0.5, 0.5, 1.0);
     }
 
     let simUV = (worldPos - simTL) / simSize;
@@ -51,7 +60,7 @@ fn fragMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     if temp < 0.0 {
         return vec4f(0.0, 0.0, 0.0, 1.0);
     } else {
-        let avgTemp =  (temp / f32(totalWalks) + 0.35); // +0.35 to offset color pallet
+        let avgTemp = (temp / f32(totalWalks) + 0.35); // +0.35 to offset color pallet
         // APROXIMATELY REMAP TO 0-1 RANGE
         // MAX IS THE MAX BOUNDARY VALUE, WHICH CAN BE EXCEEDED IN WOSTR
         let normalizedTemp = (avgTemp - minMaxBVals.x) / (minMaxBVals.y - minMaxBVals.x);
@@ -66,7 +75,7 @@ fn fragMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         //     vec3f(0.00, 0.33, 0.67),
         //     normalizedTemp
         // );
-       
+
         let outColor = color(
             vec3f(0.300, 0.500, 0.700),  // a
             vec3f(0.700, 0.500, 0.300),  // b

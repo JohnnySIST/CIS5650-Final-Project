@@ -17,24 +17,24 @@ export interface Segment {
 
 interface Geom {
   type: number; // 0 indicates circle, 1 indicates segment
-  index: number; 
+  index: number;
 }
 
 interface BVHNode {
   bbox_min: [number, number];
   bbox_max: [number, number];
-  
+
   is_leaf: boolean;
   geom_start: number;
   geom_count: number;
-  
+
   left_child: number;
   right_child: number;
 }
 
 interface BVH {
-  geoms: Uint32Array;       // LIST OF Geoms
-  nodes: Float32Array;      // LIST OF NODES
+  geoms: Uint32Array; // LIST OF Geoms
+  nodes: Float32Array; // LIST OF NODES
 }
 
 interface BVHTreeNode {
@@ -49,10 +49,11 @@ function computeBBox(
   circles: Circle[],
   segments: Segment[]
 ): [number, number, number, number] {
-  
-  let minX = Infinity, minY = Infinity;
-  let maxX = -Infinity, maxY = -Infinity;
-  
+  let minX = Infinity,
+    minY = Infinity;
+  let maxX = -Infinity,
+    maxY = -Infinity;
+
   for (const geom of geoms) {
     if (geom.type === 0) {
       // CIRCLE
@@ -68,26 +69,26 @@ function computeBBox(
       const segMinY = Math.min(seg.start[1], seg.end[1]) - seg.widthRadius;
       const segMaxX = Math.max(seg.start[0], seg.end[0]) + seg.widthRadius;
       const segMaxY = Math.max(seg.start[1], seg.end[1]) + seg.widthRadius;
-      
+
       minX = Math.min(minX, segMinX);
       minY = Math.min(minY, segMinY);
       maxX = Math.max(maxX, segMaxX);
       maxY = Math.max(maxY, segMaxY);
     }
   }
-  
+
   return [minX, minY, maxX, maxY];
 }
 
-function subdivide (
+function subdivide(
   geoms: Geom[],
   centroids: [number, number][],
   circles: Circle[],
   segments: Segment[],
-  leafSize: number,
+  leafSize: number
 ): BVHTreeNode {
   const [minX, minY, maxX, maxY] = computeBBox(geoms, circles, segments);
-  
+
   if (geoms.length <= leafSize) {
     return {
       node: {
@@ -99,10 +100,10 @@ function subdivide (
         left_child: -1,
         right_child: -1,
       },
-      geoms: geoms
+      geoms: geoms,
     };
   }
-  
+
   const extentX = maxX - minX;
   const extentY = maxY - minY;
 
@@ -121,7 +122,7 @@ function subdivide (
   var leftGeoms: Geom[] = [];
   var rightGeoms: Geom[] = [];
 
-  geoms.forEach(geo => {
+  geoms.forEach((geo) => {
     var center: [number, number];
     if (geo.type == 0) {
       center = centroids[geo.index];
@@ -147,7 +148,7 @@ function subdivide (
       mid = (maxY - minY) * 0.5 + minY;
     }
 
-    geoms.forEach(geo => {
+    geoms.forEach((geo) => {
       var center: [number, number];
       if (geo.type == 0) {
         center = centroids[geo.index];
@@ -164,22 +165,34 @@ function subdivide (
   }
 
   if (leftGeoms.length === 0 || rightGeoms.length === 0) {
-      return {
-        node: {
-          bbox_min: [minX, minY],
-          bbox_max: [maxX, maxY],
-          is_leaf: true,
-          geom_start: -1,
-          geom_count: geoms.length,
-          left_child: -1,
-          right_child: -1,
-        },
-        geoms: geoms
-      };
+    return {
+      node: {
+        bbox_min: [minX, minY],
+        bbox_max: [maxX, maxY],
+        is_leaf: true,
+        geom_start: -1,
+        geom_count: geoms.length,
+        left_child: -1,
+        right_child: -1,
+      },
+      geoms: geoms,
+    };
   }
 
-  const leftChild = subdivide(leftGeoms, centroids, circles, segments, leafSize);
-  const rightChild = subdivide(rightGeoms, centroids, circles, segments, leafSize);
+  const leftChild = subdivide(
+    leftGeoms,
+    centroids,
+    circles,
+    segments,
+    leafSize
+  );
+  const rightChild = subdivide(
+    rightGeoms,
+    centroids,
+    circles,
+    segments,
+    leafSize
+  );
 
   return {
     node: {
@@ -193,7 +206,7 @@ function subdivide (
     },
     geoms: [],
     left: leftChild,
-    right: rightChild
+    right: rightChild,
   };
 }
 
@@ -203,25 +216,24 @@ function bvhTreeGPU(
   flatGeoms: Geom[]
 ): number {
   const myIndex = flatNodes.length;
-  const node = {...parent.node};
-  
+  const node = { ...parent.node };
+
   if (node.is_leaf) {
     node.geom_start = flatGeoms.length;
     node.geom_count = parent.geoms.length;
     flatGeoms.push(...parent.geoms);
     flatNodes.push(node);
-    
   } else {
     flatNodes.push(node);
 
     const leftIdx = bvhTreeGPU(parent.left!, flatNodes, flatGeoms);
     const rightIdx = bvhTreeGPU(parent.right!, flatNodes, flatGeoms);
-    
+
     // Update child indices
     flatNodes[myIndex].left_child = leftIdx;
     flatNodes[myIndex].right_child = rightIdx;
   }
-  
+
   return myIndex;
 }
 
@@ -232,20 +244,20 @@ export function buildBVH(
 ): BVH {
   const geoms: Geom[] = [];
   const centroids: [number, number][] = [];
-  
+
   circles.forEach((circle, i) => {
     geoms.push({
       type: 0,
-      index: i
+      index: i,
     });
 
     centroids.push([circle.center[0], circle.center[1]]);
   });
-  
+
   segments.forEach((segment, i) => {
     geoms.push({
       type: 1,
-      index: i
+      index: i,
     });
     const centerX = (segment.start[0] + segment.end[0]) / 2;
     const centerY = (segment.start[1] + segment.end[1]) / 2;
@@ -259,13 +271,13 @@ export function buildBVH(
   bvhTreeGPU(rootNode, flatNodes, flatGeoms);
 
   const circleData = new Float32Array(circles.length * 4);
-    for (let i = 0; i < circles.length; i++) {
-      const offset = i * 4;
-      circleData[offset + 0] = circles[i].center[0];
-      circleData[offset + 1] = circles[i].center[1];
-      circleData[offset + 2] = circles[i].radius;
-      circleData[offset + 3] = circles[i].boundary_value;
-    }
+  for (let i = 0; i < circles.length; i++) {
+    const offset = i * 4;
+    circleData[offset + 0] = circles[i].center[0];
+    circleData[offset + 1] = circles[i].center[1];
+    circleData[offset + 2] = circles[i].radius;
+    circleData[offset + 3] = circles[i].boundary_value;
+  }
 
   const geomsData = new Uint32Array(flatGeoms.length * 2);
   for (let i = 0; i < flatGeoms.length; i++) {
@@ -282,13 +294,13 @@ export function buildBVH(
     nodeData[offset + 1] = node.bbox_min[1];
     nodeData[offset + 2] = node.bbox_max[0];
     nodeData[offset + 3] = node.bbox_max[1];
-    
+
     const uintView = new Uint32Array(nodeData.buffer, (offset + 4) * 4, 5);
     uintView[0] = node.is_leaf ? 1 : 0;
     uintView[1] = node.geom_start === -1 ? 0 : node.geom_start;
     uintView[2] = node.geom_count === -1 ? 0 : node.geom_count;
-    uintView[3] = node.left_child === -1 ? 0xFFFFFFFF : node.left_child;
-    uintView[4] = node.right_child === -1 ? 0xFFFFFFFF : node.right_child;
+    uintView[3] = node.left_child === -1 ? 0xffffffff : node.left_child;
+    uintView[4] = node.right_child === -1 ? 0xffffffff : node.right_child;
 
     uintView[5] = 0;
     uintView[6] = 0;
@@ -297,7 +309,7 @@ export function buildBVH(
 
   return {
     geoms: geomsData,
-    nodes: nodeData
+    nodes: nodeData,
   };
 }
 
@@ -364,12 +376,18 @@ export class Renderer {
   private device: GPUDevice;
 
   private circleGeomBuffer: GPUBuffer;
+
+  private boardTLBuffer: GPUBuffer;
+  private boardSizeBuffer: GPUBuffer;
+
   private simResBuffer: GPUBuffer;
   private simTLBuffer: GPUBuffer;
   private simSizeBuffer: GPUBuffer;
+
   private viewResBuffer: GPUBuffer;
   private viewTLBuffer: GPUBuffer;
   private viewSizeBuffer: GPUBuffer;
+
   private walkCountBuffer: GPUBuffer;
   private wosValuesBuffer: GPUBuffer;
   private uvBuffer: GPUBuffer;
@@ -397,6 +415,9 @@ export class Renderer {
 
   private totalWalks = 0;
 
+  private boardTL: [number, number]; // floats, world space
+  private boardSize: [number, number]; // floats, world space
+
   private simRes: [number, number]; // integers, pixels
   private simTL: [number, number]; // floats, world space
   private simSize: [number, number]; // floats, world space
@@ -418,17 +439,21 @@ export class Renderer {
     canvas: HTMLCanvasElement,
     context: GPUCanvasContext,
     device: GPUDevice,
+    boardTL: [number, number] = [120, 90],
+    boardSize: [number, number] = [60, 60],
     simRes: [number, number] = [canvas.width, canvas.height],
-    simTL: [number, number] = [-0.9, -0.9],
-    simSize: [number, number] = [1.8, 1.8],
+    simTL: [number, number] = boardTL,
+    simSize: [number, number] = boardSize,
     viewRes: [number, number] = [canvas.width, canvas.height],
-    viewTL: [number, number] = [-1, -1],
-    viewSize: [number, number] = [2, 2],
+    viewTL: [number, number] = boardTL,
+    viewSize: [number, number] = boardSize,
     fpsCallback: (fps: number) => void = () => {}
   ) {
     this.canvas = canvas;
     this.context = context;
     this.device = device;
+    this.boardTL = boardTL;
+    this.boardSize = boardSize;
     this.simRes = simRes;
     this.simTL = simTL;
     this.simSize = simSize;
@@ -567,22 +592,22 @@ export class Renderer {
     device.queue.writeBuffer(this.segmentGeomBuffer, 0, segmentData);
 
     // =============================
-    // SETUP A BVH BUFFERS HERE 
+    // SETUP A BVH BUFFERS HERE
     // =============================
-    
-    // BVH BUFFERS 
+
+    // BVH BUFFERS
     const BVH = buildBVH(circles, segments, 4);
 
     this.bvhGeomsBuffer = device.createBuffer({
-      label: 'bvh geoms buffer',
+      label: "bvh geoms buffer",
       size: BVH.geoms.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
     this.bvhNodeBuffer = device.createBuffer({
-      label: 'bvh node buffer',
-      size: BVH.nodes.byteLength, 
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+      label: "bvh node buffer",
+      size: BVH.nodes.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
     device.queue.writeBuffer(this.bvhGeomsBuffer, 0, BVH.geoms);
@@ -629,6 +654,26 @@ export class Renderer {
     const simSizeData = new Float32Array(this.simSize);
     device.queue.writeBuffer(this.simSizeBuffer, 0, simSizeData);
 
+    // board dims
+
+    this.boardTLBuffer = device.createBuffer({
+      label: "Board TL Buffer",
+      size: 8,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    const boardTLData = new Float32Array(this.boardTL);
+    device.queue.writeBuffer(this.boardTLBuffer, 0, boardTLData);
+
+    this.boardSizeBuffer = device.createBuffer({
+      label: "Board Size Buffer",
+      size: 8,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    const boardSizeData = new Float32Array(this.boardSize);
+    device.queue.writeBuffer(this.boardSizeBuffer, 0, boardSizeData);
+
     // BIND GEOMETRY DATA
     this.domainSizeBindGroup_uvPre = device.createBindGroup({
       label: "domain size uvPre bg",
@@ -637,8 +682,10 @@ export class Renderer {
         { binding: 0, resource: { buffer: this.simResBuffer } },
         { binding: 1, resource: { buffer: this.simTLBuffer } },
         { binding: 2, resource: { buffer: this.simSizeBuffer } },
-        { binding: 3, resource: { buffer: this.circleGeomBuffer } },
-        { binding: 4, resource: { buffer: this.segmentGeomBuffer } },
+        { binding: 3, resource: { buffer: this.boardTLBuffer } },
+        { binding: 4, resource: { buffer: this.boardSizeBuffer } },
+        { binding: 5, resource: { buffer: this.circleGeomBuffer } },
+        { binding: 6, resource: { buffer: this.segmentGeomBuffer } },
       ],
     });
 
@@ -646,11 +693,10 @@ export class Renderer {
       label: "bvh uvPre BG",
       layout: this.uvPre_Pipeline.getBindGroupLayout(2),
       entries: [
-        { binding: 0, resource: { buffer: this.bvhGeomsBuffer} },
-        { binding: 1, resource: { buffer: this.bvhNodeBuffer} }
-      ]
+        { binding: 0, resource: { buffer: this.bvhGeomsBuffer } },
+        { binding: 1, resource: { buffer: this.bvhNodeBuffer } },
+      ],
     });
-
 
     // THIS STORES UVs ON SCREEN FOR QUEERY POINTS
     this.uvBuffer = device.createBuffer({
@@ -694,9 +740,11 @@ export class Renderer {
         { binding: 0, resource: { buffer: this.simResBuffer } },
         { binding: 1, resource: { buffer: this.simTLBuffer } },
         { binding: 2, resource: { buffer: this.simSizeBuffer } },
-        { binding: 3, resource: { buffer: this.walkCountBuffer } },
-        { binding: 4, resource: { buffer: this.circleGeomBuffer } },
-        { binding: 5, resource: { buffer: this.segmentGeomBuffer } },
+        { binding: 3, resource: { buffer: this.boardTLBuffer } },
+        { binding: 4, resource: { buffer: this.boardSizeBuffer } },
+        { binding: 5, resource: { buffer: this.walkCountBuffer } },
+        { binding: 6, resource: { buffer: this.circleGeomBuffer } },
+        { binding: 7, resource: { buffer: this.segmentGeomBuffer } },
       ],
     });
 
@@ -719,12 +767,12 @@ export class Renderer {
     });
 
     this.bvhBindGroup_compute = device.createBindGroup({
-      label: 'bvh bind group',
+      label: "bvh bind group",
       layout: this.wos_pipeline.getBindGroupLayout(2),
       entries: [
-        { binding: 0, resource: { buffer: this.bvhGeomsBuffer} },
-        { binding: 1, resource: { buffer: this.bvhNodeBuffer } }
-      ]
+        { binding: 0, resource: { buffer: this.bvhGeomsBuffer } },
+        { binding: 1, resource: { buffer: this.bvhNodeBuffer } },
+      ],
     });
 
     // ======================================
@@ -780,12 +828,16 @@ export class Renderer {
     device.queue.writeBuffer(this.viewSizeBuffer, 0, viewSizeData);
 
     this.minMaxBValsBuffer = device.createBuffer({
-      label: 'min max bval buffer',
+      label: "min max bval buffer",
       size: 8,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    device.queue.writeBuffer(this.minMaxBValsBuffer, 0, new Float32Array(this.minMaxBvals));
+    device.queue.writeBuffer(
+      this.minMaxBValsBuffer,
+      0,
+      new Float32Array(this.minMaxBvals)
+    );
 
     this.domainSizeBindGroup_frag = device.createBindGroup({
       label: "domain size frag bg",
@@ -794,11 +846,13 @@ export class Renderer {
         { binding: 0, resource: { buffer: this.simResBuffer } },
         { binding: 1, resource: { buffer: this.simTLBuffer } },
         { binding: 2, resource: { buffer: this.simSizeBuffer } },
-        { binding: 3, resource: { buffer: this.viewResBuffer } },
-        { binding: 4, resource: { buffer: this.viewTLBuffer } },
-        { binding: 5, resource: { buffer: this.viewSizeBuffer } },
-        { binding: 6, resource: { buffer: this.walkCountBuffer } },
-        { binding: 7, resource: { buffer: this.minMaxBValsBuffer } }
+        { binding: 3, resource: { buffer: this.boardTLBuffer } },
+        { binding: 4, resource: { buffer: this.boardSizeBuffer } },
+        { binding: 5, resource: { buffer: this.viewResBuffer } },
+        { binding: 6, resource: { buffer: this.viewTLBuffer } },
+        { binding: 7, resource: { buffer: this.viewSizeBuffer } },
+        { binding: 8, resource: { buffer: this.walkCountBuffer } },
+        { binding: 9, resource: { buffer: this.minMaxBValsBuffer } },
       ],
     });
 

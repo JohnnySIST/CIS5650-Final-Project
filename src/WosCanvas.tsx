@@ -242,6 +242,8 @@ export default function WosCanvas({
           canvas,
           context,
           device,
+          boardTL,
+          boardSize,
           simRes,
           simTL,
           simSize,

@@ -12,31 +12,30 @@ struct Segment {
 }
 
 struct Geom {
-  geoType: u32,
-  index: u32,
+    geoType: u32,
+    index: u32,
 }
 
 struct BVHNode {
-  bbox_min: vec2f,
-  bbox_max: vec2f,
-  
-  is_leaf: u32,
-  geom_start: u32,
-  geom_count: u32,
-  
-  left_child: u32,
-  right_child: u32,
-
-  _pad0: u32,
-  _pad1: u32,
-  _pad2: u32,
+    bbox_min: vec2f,
+    bbox_max: vec2f,
+    is_leaf: u32,
+    geom_start: u32,
+    geom_count: u32,
+    left_child: u32,
+    right_child: u32,
+    _pad0: u32,
+    _pad1: u32,
+    _pad2: u32,
 }
 
 @group(0) @binding(0) var<uniform> simRes: vec2u;
 @group(0) @binding(1) var<uniform> simTL: vec2f;
 @group(0) @binding(2) var<uniform> simSize: vec2f;
-@group(0) @binding(3) var<storage> circles: array<Circle>;
-@group(0) @binding(4) var<storage> segments: array<Segment>;
+@group(0) @binding(3) var<uniform> boardTL: vec2f;
+@group(0) @binding(4) var<uniform> boardSize: vec2f;
+@group(0) @binding(5) var<storage> circles: array<Circle>;
+@group(0) @binding(6) var<storage> segments: array<Segment>;
 
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 
@@ -60,102 +59,102 @@ fn distanceToSegment(worldPos: vec2f, segment: Segment) -> f32 {
 }
 
 fn distanceToAABB(point: vec2f, bbox_min: vec2f, bbox_max: vec2f) -> f32 {
-  let dx = max(max(bbox_min.x - point.x, 0.0), point.x - bbox_max.x);
-  let dy = max(max(bbox_min.y - point.y, 0.0), point.y - bbox_max.y);
-  return sqrt(dx * dx + dy * dy);
+    let dx = max(max(bbox_min.x - point.x, 0.0), point.x - bbox_max.x);
+    let dy = max(max(bbox_min.y - point.y, 0.0), point.y - bbox_max.y);
+    return sqrt(dx * dx + dy * dy);
 }
 
 fn queryBVH(pos: vec2f) -> vec2f {
-  var stack_ptr: i32 = 0;
-  var stack: array<u32, 32>;
-  stack[0] = 0u;
-  
-  var closest_dist = 1e10;
-  var closest_boundary_value = 0.0;
-  
-  var iterations = 0u;
-  
-  while (stack_ptr >= 0) {
-    iterations += 1u;
-    if (iterations > 200u) { break; }
-    
-    let node_idx = stack[u32(stack_ptr)];
-    stack_ptr -= 1;
-    
-    if (node_idx >= arrayLength(&bvhNodes)) { continue; }
-    
-    let node = bvhNodes[node_idx];
+    var stack_ptr: i32 = 0;
+    var stack: array<u32, 32>;
+    stack[0] = 0u;
+
+    var closest_dist = 1e10;
+    var closest_boundary_value = 0.0;
+
+    var iterations = 0u;
+
+    while stack_ptr >= 0 {
+        iterations += 1u;
+        if iterations > 200u { break; }
+
+        let node_idx = stack[u32(stack_ptr)];
+        stack_ptr -= 1;
+
+        if node_idx >= arrayLength(&bvhNodes) { continue; }
+
+        let node = bvhNodes[node_idx];
     
     // PRUNE FAR SUBTREES
-    let bbox_dist = distanceToAABB(pos, node.bbox_min, node.bbox_max);
-    if (bbox_dist > abs(closest_dist)) {
+        let bbox_dist = distanceToAABB(pos, node.bbox_min, node.bbox_max);
+        if bbox_dist > abs(closest_dist) {
       continue;
-    }
-    
-    if (node.is_leaf == 1u) {
-      // TEST FOR LEAF
-      for (var i = 0u; i < node.geom_count; i++) {
-        let geom_idx = node.geom_start + i;
-        if (geom_idx >= arrayLength(&bvhGeo)) { break; }
-        
-        let geom = bvhGeo[geom_idx];
-        
-        var dist: f32;
-        var bVal: f32;
-        
-        if (geom.geoType == 0u) {
-          if (geom.index >= arrayLength(&circles)) { continue; }
-          let circle = circles[geom.index];
-          dist = length(pos - circle.center) - circle.radius;
-          bVal = circle.boundary_value;
-        } else {
-          if (geom.index >= arrayLength(&segments)) { continue; }
-          let segment = segments[geom.index];
-          dist = distanceToSegment(pos, segment);
-          bVal = segment.boundary_value;
         }
+
+        if node.is_leaf == 1u {
+      // TEST FOR LEAF
+            for (var i = 0u; i < node.geom_count; i++) {
+                let geom_idx = node.geom_start + i;
+                if geom_idx >= arrayLength(&bvhGeo) { break; }
+
+                let geom = bvhGeo[geom_idx];
+
+                var dist: f32;
+                var bVal: f32;
+
+                if geom.geoType == 0u {
+                    if geom.index >= arrayLength(&circles) { continue; }
+                    let circle = circles[geom.index];
+                    dist = length(pos - circle.center) - circle.radius;
+                    bVal = circle.boundary_value;
+                } else {
+                    if geom.index >= arrayLength(&segments) { continue; }
+                    let segment = segments[geom.index];
+                    dist = distanceToSegment(pos, segment);
+                    bVal = segment.boundary_value;
+                }
         
         // UPDATE CLOSEST POINT
-        if (dist < closest_dist) {
-          closest_dist = dist;
-          closest_boundary_value = bVal;
-        }
-      }
-    } else {
-        // RECURSE ON CHILDREN
-        if (node.left_child != 0xFFFFFFFFu && node.left_child < arrayLength(&bvhNodes) && stack_ptr < 30) {
-            let left_node = bvhNodes[node.left_child];
-            let left_bbox_dist = distanceToAABB(pos, left_node.bbox_min, left_node.bbox_max);
-            
-            if (left_bbox_dist <= abs(closest_dist)) {
-                stack_ptr += 1;
-                stack[u32(stack_ptr)] = node.left_child;
+                if dist < closest_dist {
+                    closest_dist = dist;
+                    closest_boundary_value = bVal;
+                }
             }
-        }
-        
-        if (node.right_child != 0xFFFFFFFFu && node.right_child < arrayLength(&bvhNodes) && stack_ptr < 30) {
-            let right_node = bvhNodes[node.right_child];
-            let right_bbox_dist = distanceToAABB(pos, right_node.bbox_min, right_node.bbox_max);
-            
-            if (right_bbox_dist <= abs(closest_dist)) {
-                stack_ptr += 1;
-                stack[u32(stack_ptr)] = node.right_child;
+        } else {
+        // RECURSE ON CHILDREN
+            if node.left_child != 0xFFFFFFFFu && node.left_child < arrayLength(&bvhNodes) && stack_ptr < 30 {
+                let left_node = bvhNodes[node.left_child];
+                let left_bbox_dist = distanceToAABB(pos, left_node.bbox_min, left_node.bbox_max);
+
+                if left_bbox_dist <= abs(closest_dist) {
+                    stack_ptr += 1;
+                    stack[u32(stack_ptr)] = node.left_child;
+                }
+            }
+
+            if node.right_child != 0xFFFFFFFFu && node.right_child < arrayLength(&bvhNodes) && stack_ptr < 30 {
+                let right_node = bvhNodes[node.right_child];
+                let right_bbox_dist = distanceToAABB(pos, right_node.bbox_min, right_node.bbox_max);
+
+                if right_bbox_dist <= abs(closest_dist) {
+                    stack_ptr += 1;
+                    stack[u32(stack_ptr)] = node.right_child;
+                }
             }
         }
     }
-  }
-  
-  return vec2f(closest_dist, closest_boundary_value);
+
+    return vec2f(closest_dist, closest_boundary_value);
 }
 
 fn distanceToBoundary(worldPos: vec2f) -> f32 {
     let texSizef = vec2f(f32(simRes.x), f32(simRes.y));
 
-    let simBR = simTL + simSize;
+    let boardBR = boardTL + boardSize;
 
     let boxDist = min(
-        min(worldPos.x - simTL.x, simBR.x - worldPos.x),
-        min(worldPos.y - simTL.y, simBR.y - worldPos.y)
+        min(worldPos.x - boardTL.x, boardBR.x - worldPos.x),
+        min(worldPos.y - boardTL.y, boardBR.y - worldPos.y)
     );
 
     // NAIVE CHECKING ALL BOUNDARIES
