@@ -11,15 +11,37 @@ struct Segment {
     boundary_value: f32
 }
 
+struct Geom {
+  geoType: u32,
+  index: u32,
+}
+
+struct BVHNode {
+  bbox_min: vec2f,
+  bbox_max: vec2f,
+  
+  is_leaf: u32,
+  geom_start: u32,
+  geom_count: u32,
+  
+  left_child: u32,
+  right_child: u32,
+
+  _pad0: u32,
+  _pad1: u32,
+  _pad2: u32,
+}
+
 @group(0) @binding(0) var<uniform> simRes: vec2u;
 @group(0) @binding(1) var<uniform> simTL: vec2f;
 @group(0) @binding(2) var<uniform> simSize: vec2f;
 @group(0) @binding(3) var<storage> circles: array<Circle>;
 @group(0) @binding(4) var<storage> segments: array<Segment>;
+
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
-// @group(2) @binding(0) var<uniform> gridRes: vec2u;
-// @group(2) @binding(1) var<storage> gridCells: array<u32>;
-// @group(2) @binding(2) var<storage> gridGeoms: array<u32>;
+
+@group(2) @binding(0) var<storage> bvhGeo: array<Geom>;
+@group(2) @binding(1) var<storage> bvhNodes: array<BVHNode>;
 
 fn distanceToSegment(worldPos: vec2f, segment: Segment) -> f32 {
     let AB = segment.end - segment.start;
@@ -37,6 +59,95 @@ fn distanceToSegment(worldPos: vec2f, segment: Segment) -> f32 {
     return dist - segment.widthRadius;
 }
 
+fn distanceToAABB(point: vec2f, bbox_min: vec2f, bbox_max: vec2f) -> f32 {
+  let dx = max(max(bbox_min.x - point.x, 0.0), point.x - bbox_max.x);
+  let dy = max(max(bbox_min.y - point.y, 0.0), point.y - bbox_max.y);
+  return sqrt(dx * dx + dy * dy);
+}
+
+fn queryBVH(pos: vec2f) -> vec2f {
+  var stack_ptr: i32 = 0;
+  var stack: array<u32, 32>;
+  stack[0] = 0u;
+  
+  var closest_dist = 1e10;
+  var closest_boundary_value = 0.0;
+  
+  var iterations = 0u;
+  
+  while (stack_ptr >= 0) {
+    iterations += 1u;
+    if (iterations > 200u) { break; } // Safety
+    
+    let node_idx = stack[u32(stack_ptr)];
+    stack_ptr -= 1;
+    
+    if (node_idx >= arrayLength(&bvhNodes)) { continue; }
+    
+    let node = bvhNodes[node_idx];
+    
+    // CRITICAL: Early exit if bbox is farther than current best
+    let bbox_dist = distanceToAABB(pos, node.bbox_min, node.bbox_max);
+    if (bbox_dist > abs(closest_dist)) {
+      continue;
+    }
+    
+    if (node.is_leaf == 1u) {
+      // Test geometries in leaf
+      for (var i = 0u; i < node.geom_count; i++) {
+        let geom_idx = node.geom_start + i;
+        if (geom_idx >= arrayLength(&bvhGeo)) { break; }
+        
+        let geom = bvhGeo[geom_idx];
+        
+        var dist: f32;
+        var bVal: f32;
+        
+        if (geom.geoType == 0u) {
+          if (geom.index >= arrayLength(&circles)) { continue; }
+          let circle = circles[geom.index];
+          dist = length(pos - circle.center) - circle.radius;
+          bVal = circle.boundary_value;
+        } else {
+          if (geom.index >= arrayLength(&segments)) { continue; }
+          let segment = segments[geom.index];
+          dist = distanceToSegment(pos, segment);
+          bVal = segment.boundary_value;
+        }
+        
+        // Update closest (use abs for signed distance)
+        if (dist < closest_dist) {
+          closest_dist = dist;
+          closest_boundary_value = bVal;
+        }
+      }
+    } else {
+      // Interior node - push children if they might be closer
+        if (node.left_child != 0xFFFFFFFFu && node.left_child < arrayLength(&bvhNodes) && stack_ptr < 30) {
+            let left_node = bvhNodes[node.left_child];
+            let left_bbox_dist = distanceToAABB(pos, left_node.bbox_min, left_node.bbox_max);
+            
+            if (left_bbox_dist <= abs(closest_dist)) {
+                stack_ptr += 1;
+                stack[u32(stack_ptr)] = node.left_child;
+            }
+        }
+        
+        if (node.right_child != 0xFFFFFFFFu && node.right_child < arrayLength(&bvhNodes) && stack_ptr < 30) {
+            let right_node = bvhNodes[node.right_child];
+            let right_bbox_dist = distanceToAABB(pos, right_node.bbox_min, right_node.bbox_max);
+            
+            if (right_bbox_dist <= abs(closest_dist)) {
+                stack_ptr += 1;
+                stack[u32(stack_ptr)] = node.right_child;
+            }
+        }
+    }
+  }
+  
+  return vec2f(closest_dist, closest_boundary_value);
+}
+
 fn distanceToBoundary(worldPos: vec2f) -> f32 {
     let texSizef = vec2f(f32(simRes.x), f32(simRes.y));
 
@@ -49,43 +160,21 @@ fn distanceToBoundary(worldPos: vec2f) -> f32 {
 
 
     // NAIVE CHECKING ALL BOUNDARIES
-    var circleDistFinal = length(worldPos - circles[0].center) - circles[0].radius;
-    for (var i = 1u; i < arrayLength(&circles); i++) {
-        circleDistFinal = min(circleDistFinal, length(worldPos - circles[i].center) - circles[i].radius);
-    }
-
-    var segmentDistFinal = distanceToSegment(worldPos, segments[0]);
-    for (var i = 1u; i < arrayLength(&segments); i++) {
-        segmentDistFinal = min(segmentDistFinal, distanceToSegment(worldPos, segments[i]));
-    }
-
-    // CHECK BOUNDARY USING DA GRID :D
-    // let normalizedPos = (worldPos - simTL) / simSize;
-    // let gridPos = vec2u(
-    //     u32(clamp(normalizedPos.x, 0.0, 0.9999) * f32(gridRes.x)),
-    //     u32(clamp(normalizedPos.y, 0.0, 0.9999) * f32(gridRes.y))
-    // );
-
-    // let gridCellIdx = gridPos.y * gridRes.x + gridPos.x;
-    // let cellStartIdx = gridCells[gridCellIdx * 2u];
-    // let cellCount = gridCells[gridCellIdx * 2u + 1u];
-
-    // var geoDist = length(worldPos - circles[0].center) - circles[0].radius;
-    // for (var i = cellStartIdx; i < cellStartIdx + cellCount; i++) {
-    //     let geomType = gridGeoms[i * 2u]; // 0 is circle : 1 is segment
-    //     let geomIndex = gridGeoms[i * 2u + 1u];
-
-    //     if geomType == 0u {
-    //         let dist = length(worldPos - circles[geomIndex].center) - circles[geomIndex].radius;
-    //         geoDist = min(geoDist, dist);
-    //     } else {
-    //         let dist = distanceToSegment(worldPos, segments[geomIndex]);
-    //         geoDist = min(geoDist, dist);
-    //     }
+    // var circleDistFinal = length(worldPos - circles[0].center) - circles[0].radius;
+    // for (var i = 1u; i < arrayLength(&circles); i++) {
+    //     circleDistFinal = min(circleDistFinal, length(worldPos - circles[i].center) - circles[i].radius);
     // }
 
-    return min(min(boxDist, circleDistFinal), segmentDistFinal);
+    // var segmentDistFinal = distanceToSegment(worldPos, segments[0]);
+    // for (var i = 1u; i < arrayLength(&segments); i++) {
+    //     segmentDistFinal = min(segmentDistFinal, distanceToSegment(worldPos, segments[i]));
+    // }
+    //return min(min(boxDist, circleDistFinal), segmentDistFinal);
     //return min(boxDist, geoDist);
+
+    // BVH CHECK
+    let bvhResult = queryBVH(worldPos);
+    return min(boxDist, bvhResult[0]);
 }
 
 @compute @workgroup_size(8, 8)

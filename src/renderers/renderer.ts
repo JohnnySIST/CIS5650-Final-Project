@@ -15,12 +15,6 @@ export interface Segment {
   boundary_value: number;
 }
 
-interface Grid {
-  gridRes: [number, number];
-  gridCells: Uint32Array; // Pairs of two values (start, length) for indices into cellGeoms
-  cellGeoms: Uint32Array; // list of geoms for each cell 
-}
-
 interface Geom {
   type: number; // 0 indicates circle, 1 indicates segment
   index: number; 
@@ -48,90 +42,6 @@ interface BVHTreeNode {
   geoms: Geom[];
   left?: BVHTreeNode;
   right?: BVHTreeNode;
-}
-
-// OLD INCORRECT CLOSEST POINT SPACIAL GRID 
-function buildGrid(
-  circles: Circle[],
-  segments: Segment[],
-  simTL: [number, number],
-  simSize: [number, number],
-  gridRes: [number, number] = [32, 32]
-): Grid {
-  const [gridW, gridH] = gridRes;
-  const cellSize = [simSize[0] / gridW, simSize[1] / gridH];
-
-  const cellBoundaries: Geom[][] = [];
-  for (let i = 0; i < gridW * gridH; i++) {
-    cellBoundaries.push([]);
-  }
-
-  function addToCells(
-    minX: number,
-    minY: number,
-    maxX: number,
-    maxY: number,
-    geomType: number,
-    geomIndex: number
-  ) {
-    minX = Math.max(minX, simTL[0]);
-    minY = Math.max(minY, simTL[1]);
-    maxX = Math.min(maxX, simTL[0] + simSize[0]);
-    maxY = Math.min(maxY, simTL[1] + simSize[1]);
-
-    const cellMinX = Math.floor((minX - simTL[0]) / cellSize[0]);
-    const cellMinY = Math.floor((minY - simTL[1]) / cellSize[1]);
-    const cellMaxX = Math.floor((maxX - simTL[0]) / cellSize[0]);
-    const cellMaxY = Math.floor((maxY - simTL[1]) / cellSize[1]);
-
-    for (let cy = Math.max(0, cellMinY); cy <= Math.min(gridH - 1, cellMaxY); cy++) {
-      for (let cx = Math.max(0, cellMinX); cx <= Math.min(gridW - 1, cellMaxX); cx++) {
-        const cellIdx = cy * gridW + cx;
-        
-        cellBoundaries[cellIdx].push({ type: geomType, index: geomIndex });
-      }
-    }
-  }
-
-  circles.forEach((circle, i) => {
-    const [cx, cy] = circle.center;
-    const r = circle.radius;
-    addToCells(cx - r, cy - r, cx + r, cy + r, 0, i);
-  });
-
-  segments.forEach((seg, i) => {
-    const [x1, y1] = seg.start;
-    const [x2, y2] = seg.end;
-    const r = seg.widthRadius;
-
-    const minX = Math.min(x1, x2) - r;
-    const minY = Math.min(y1, y2) - r;
-    const maxX = Math.max(x1, x2) + r;
-    const maxY = Math.max(y1, y2) + r;
-
-    addToCells(minX, minY, maxX, maxY, 1, i);
-  });
-
-  let totalRefs = 0;
-  cellBoundaries.forEach((cell) => (totalRefs += cell.length));
-
-  const gridCells = new Uint32Array(gridW * gridH * 2);
-  const cellGeoms = new Uint32Array(totalRefs * 2);
-  
-  let currentIdx = 0;
-  // Loop fills them with data:
-  cellBoundaries.forEach((cell, cellIdx) => {
-    gridCells[cellIdx * 2] = currentIdx;
-    gridCells[cellIdx * 2 + 1] = cell.length;
-    
-    cell.forEach(ref => {
-      cellGeoms[currentIdx * 2] = ref.type;
-      cellGeoms[currentIdx * 2 + 1] = ref.index;
-      currentIdx++;
-    });
-  });
-
-  return { gridRes, gridCells, cellGeoms };
 }
 
 function computeBBox(
@@ -466,15 +376,9 @@ export class Renderer {
   private segmentGeomBuffer: GPUBuffer;
 
   private minMaxBValsBuffer: GPUBuffer;
-  
-  // GRID BUFFERS:
-  private gridBindGroup_uvPre: GPUBindGroup;
-  private gridBindGroup_compute: GPUBindGroup;
-  private gridResBuffer: GPUBuffer;
-  private gridCellsBuffer: GPUBuffer;
-  private gridIndicesBuffer: GPUBuffer;
 
   // BVH BUFFERS
+  private bvhBindGroup_uvPre: GPUBindGroup;
   private bvhBindGroup_compute: GPUBindGroup;
   private bvhGeomsBuffer: GPUBuffer;
   private bvhNodeBuffer: GPUBuffer;
@@ -655,33 +559,9 @@ export class Renderer {
     device.queue.writeBuffer(this.segmentGeomBuffer, 0, segmentData);
 
     // =============================
-    // SETUP A BVH OR GRID STRUCTURE HERE 
+    // SETUP A BVH BUFFERS HERE 
     // =============================
     
-    // const gridData = buildGrid(circles, segments, this.simTL, this.simSize, [8,8]);
-
-    // this.gridResBuffer = device.createBuffer({
-    //     label: "grid resolution",
-    //     size: 2 * 4,
-    //     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    // });
-    // device.queue.writeBuffer(this.gridResBuffer, 0, new Uint32Array(gridData.gridRes));
-
-    // this.gridCellsBuffer = device.createBuffer({
-    //     label: "grid cells",
-    //     size: gridData.gridCells.byteLength,
-    //     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    // });
-    // device.queue.writeBuffer(this.gridCellsBuffer, 0, new Uint32Array(gridData.gridCells));
-
-    // this.gridIndicesBuffer = device.createBuffer({
-    //     label: "grid indices",
-    //     size: gridData.cellGeoms.byteLength,
-    //     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    // });
-    // device.queue.writeBuffer(this.gridIndicesBuffer, 0,  new Uint32Array(gridData.cellGeoms));
-    
-
     // BVH BUFFERS 
     const BVH = buildBVH(circles, segments, 4);
 
@@ -721,7 +601,6 @@ export class Renderer {
     });
 
     const simResData = new Uint32Array(this.simRes);
-
     device.queue.writeBuffer(this.simResBuffer, 0, simResData);
 
     this.simTLBuffer = device.createBuffer({
@@ -731,7 +610,6 @@ export class Renderer {
     });
 
     const simTLData = new Float32Array(this.simTL);
-
     device.queue.writeBuffer(this.simTLBuffer, 0, simTLData);
 
     this.simSizeBuffer = device.createBuffer({
@@ -741,7 +619,6 @@ export class Renderer {
     });
 
     const simSizeData = new Float32Array(this.simSize);
-
     device.queue.writeBuffer(this.simSizeBuffer, 0, simSizeData);
 
     // BIND GEOMETRY DATA
@@ -757,16 +634,15 @@ export class Renderer {
       ],
     });
 
-    // BIND GRID
-    // this.gridBindGroup_uvPre = device.createBindGroup({
-    //   label: "grid bg",
-    //   layout: this.uvPre_Pipeline.getBindGroupLayout(2),
-    //   entries: [
-    //     { binding: 0, resource: { buffer: this.gridResBuffer} },
-    //     { binding: 1, resource: { buffer: this.gridCellsBuffer} },
-    //     { binding: 2, resource: { buffer: this.gridIndicesBuffer} }
-    //   ],
-    // });
+    this.bvhBindGroup_uvPre = device.createBindGroup({
+      label: "bvh uvPre BG",
+      layout: this.uvPre_Pipeline.getBindGroupLayout(2),
+      entries: [
+        { binding: 0, resource: { buffer: this.bvhGeomsBuffer} },
+        { binding: 1, resource: { buffer: this.bvhNodeBuffer} }
+      ]
+    });
+
 
     // THIS STORES UVs ON SCREEN FOR QUEERY POINTS
     this.uvBuffer = device.createBuffer({
@@ -833,16 +709,6 @@ export class Renderer {
         { binding: 1, resource: { buffer: this.wosValuesBuffer } },
       ],
     });
-
-    // this.gridBindGroup_compute = device.createBindGroup({
-    //   label: "grid bg wos",
-    //   layout: this.wos_pipeline.getBindGroupLayout(2),
-    //   entries: [
-    //     { binding: 0, resource: { buffer: this.gridResBuffer} },
-    //     { binding: 1, resource: { buffer: this.gridCellsBuffer} },
-    //     { binding: 2, resource: { buffer: this.gridIndicesBuffer} }
-    //   ],
-    // });
 
     this.bvhBindGroup_compute = device.createBindGroup({
       label: 'bvh bind group',
@@ -958,6 +824,7 @@ export class Renderer {
     uvPreComputePass.setPipeline(this.uvPre_Pipeline);
     uvPreComputePass.setBindGroup(0, this.domainSizeBindGroup_uvPre);
     uvPreComputePass.setBindGroup(1, this.uvBindGroup_uvPre);
+    uvPreComputePass.setBindGroup(2, this.bvhBindGroup_uvPre);
 
     const wgSize_Pre = 8;
     const dispatchX_Pre = Math.ceil(this.simRes[0] / wgSize_Pre);

@@ -48,10 +48,6 @@ struct BVHNode {
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 @group(1) @binding(1) var<storage, read_write> wos_valueList: array<f32>;
 
-// @group(2) @binding(0) var<uniform> gridRes: vec2u;
-// @group(2) @binding(1) var<storage> gridCells: array<u32>;
-// @group(2) @binding(2) var<storage> gridGeoms: array<u32>;
-
 @group(2) @binding(0) var<storage> bvhGeo: array<Geom>;
 @group(2) @binding(1) var<storage> bvhNodes: array<BVHNode>;
 
@@ -71,12 +67,6 @@ fn distanceToSegment(worldPos: vec2f, segment: Segment) -> f32 {
     return dist - segment.widthRadius;
 }
 
-// fn randomFloat(state: ptr<function, u32>) -> f32 {
-//     let a = 1664525u;
-//     let c = 1013904223u;
-//     *state = (*state * a + c);
-//     return f32(*state) / 4294967296.0;
-// }
 
 fn pcg(state: ptr<function, u32>) -> u32 {
     let old = *state;
@@ -117,14 +107,14 @@ fn queryBVH(pos: vec2f) -> vec2f {
     
     let node = bvhNodes[node_idx];
     
-    // CRITICAL: Early exit if bbox is farther than current best
+    // PRUNE FAR SUBTREES
     let bbox_dist = distanceToAABB(pos, node.bbox_min, node.bbox_max);
     if (bbox_dist > abs(closest_dist)) {
-      continue; // Skip this entire subtree
+      continue;
     }
     
     if (node.is_leaf == 1u) {
-      // Test geometries in leaf
+      // TEST FOR LEAF
       for (var i = 0u; i < node.geom_count; i++) {
         let geom_idx = node.geom_start + i;
         if (geom_idx >= arrayLength(&bvhGeo)) { break; }
@@ -146,14 +136,14 @@ fn queryBVH(pos: vec2f) -> vec2f {
           bVal = segment.boundary_value;
         }
         
-        // Update closest (use abs for signed distance)
+        // UPDATE CLOSEST POINT
         if (abs(dist) < abs(closest_dist)) {
           closest_dist = dist;
           closest_boundary_value = bVal;
         }
       }
     } else {
-      // Interior node - push children if they might be closer
+        // RECURSE ON CHILDREN
         if (node.left_child != 0xFFFFFFFFu && node.left_child < arrayLength(&bvhNodes) && stack_ptr < 30) {
             let left_node = bvhNodes[node.left_child];
             let left_bbox_dist = distanceToAABB(pos, left_node.bbox_min, left_node.bbox_max);
@@ -232,7 +222,7 @@ fn distanceToBoundaryWoS(pos: vec2f) -> vec2f {
 fn walkOnSpheres(startPos: vec2f, rngState: ptr<function, u32>) -> f32 {
     var pos = startPos;
     var temp = 0.0;
-    let epsilon = 0.05; // was 2.0
+    let epsilon = 0.01; // was 2.0
     let maxSteps = 20;
 
     for (var step = 0; step < maxSteps; step++) {
