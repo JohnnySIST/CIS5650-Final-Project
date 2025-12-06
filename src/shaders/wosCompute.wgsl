@@ -426,12 +426,11 @@ fn walkOnStars(startPos: vec2f, rngState: ptr<function, u32>) -> f32 {
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) id: vec3u) {
-    let index = id.y * simRes.x + id.x;
-    let uv = uv_list[index];//vec2f(f32(coords.x), f32(coords.y)) / vec2f(f32(texSize.x), f32(texSize.y));
-    let coords = vec2u(id.xy);
-    if coords.x >= simRes.x || coords.y >= simRes.y {
+    if id.x >= simRes.x || id.y >= simRes.y {
         return;
     }
+    let index = id.y * simRes.x + id.x;
+    let uv = uv_list[index];//vec2f(f32(coords.x), f32(coords.y)) / vec2f(f32(texSize.x), f32(texSize.y));
 
   // IGNOR UVs FOR QUEERY POINTS NOT IN BOUNDARY
   // CHANGE LATER SO THREADS NEVER RUN ON THESE TYPES OF POINTS (Stream Compaction :D)
@@ -444,7 +443,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 
     let numWalks = 1u; // UPDATE totalWalks in render.ts if you change this
     var totalTemp = 0.0;
-    var seed = coords.x * 747796405u + coords.y * 2891336453u * totalWalks;
+    var seed = id.x * 747796405u + id.y * 2891336453u * totalWalks;
 
     for (var i = 0u; i < numWalks; i++) {
         let temp = walkOnSpheres(worldPos, &seed);//walkOnStars(worldPos, &seed);//

@@ -750,7 +750,7 @@ export class Renderer {
 
     this.wosValuesBuffer = device.createBuffer({
       label: "wos values buffer",
-      size: canvas.width * canvas.height * 4,
+      size: this.simRes[0] * this.simRes[1] * 4,
       usage:
         GPUBufferUsage.STORAGE |
         GPUBufferUsage.COPY_DST |

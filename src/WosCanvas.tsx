@@ -21,10 +21,6 @@ function downloadFile(content: string, fileName: string, contentType: string) {
 
 type Vec2 = { x: number; y: number };
 type EditorMode = "select";
-interface EditorState {
-  mode: EditorMode;
-  isPanning: boolean;
-}
 
 export default function WosCanvas({
   fpsCallback,
@@ -33,6 +29,9 @@ export default function WosCanvas({
 }) {
   const webgpuCanvasRef = useRef<HTMLCanvasElement>(null);
   const uiCanvasRef = useRef<HTMLCanvasElement>(null);
+  const adapterRef = useRef<GPUAdapter | null>(null);
+  const deviceRef = useRef<GPUDevice | null>(null);
+  const gpuContextRef = useRef<GPUCanvasContext | null>(null);
 
   const [traceWidth, setTraceWidth] = useState(5);
 
@@ -62,12 +61,19 @@ export default function WosCanvas({
   const [simTL, setSimTL] = useState<[number, number]>(boardBoundsTL); // floats, world space
   const [simSize, setSimSize] = useState<[number, number]>(boardBoundsSize); // floats, world space
 
-  const [viewRes, setViewRes] = useState<[number, number]>([
+  // const [viewRes, setViewRes] = useState<[number, number]>([
+  //   webgpuCanvasRef.current ? webgpuCanvasRef.current.width : 1920,
+  //   webgpuCanvasRef.current ? webgpuCanvasRef.current.height : 1080,
+  // ]); // integers, pixels
+  const viewRes: [number, number] = [
     webgpuCanvasRef.current ? webgpuCanvasRef.current.width : 1920,
     webgpuCanvasRef.current ? webgpuCanvasRef.current.height : 1080,
-  ]); // integers, pixels
+  ];
   const [viewTL, setViewTL] = useState<[number, number]>(simTL); // floats, world space
   const [viewSize, setViewSize] = useState<[number, number]>(simSize); // floats, world space
+
+  const [boardTL, setBoardTL] = useState<[number, number]>([120, 90]); // floats, world space
+  const [boardSize, setBoardSize] = useState<[number, number]>([60, 60]); // floats, world space
 
   const [renderer, setRenderer] = useState<Renderer | null>(null);
 
@@ -82,10 +88,14 @@ export default function WosCanvas({
 
   function getWorldPositionFromCanvasUV(
     canvasU: number,
-    canvasV: number
+    canvasV: number,
+    suppliedViewSize?: [number, number],
+    suppliedViewTL?: [number, number]
   ): Vec2 {
-    const worldX = canvasU * viewSize[0] + viewTL[0];
-    const worldY = canvasV * viewSize[1] + viewTL[1];
+    const tempViewSize = suppliedViewSize || viewSize;
+    const tempViewTL = suppliedViewTL || viewTL;
+    const worldX = canvasU * tempViewSize[0] + tempViewTL[0];
+    const worldY = canvasV * tempViewSize[1] + tempViewTL[1];
     return { x: worldX, y: worldY };
   }
 
@@ -156,9 +166,18 @@ export default function WosCanvas({
     return { u: canvasU, v: canvasV };
   }
 
-  function getMouseWorldPosition(e: MouseEvent): Vec2 {
+  function getMouseWorldPosition(
+    e: MouseEvent,
+    suppliedViewSize?: [number, number],
+    suppliedViewTL?: [number, number]
+  ): Vec2 {
     const { u: canvasU, v: canvasV } = getCanvasUVFromEvent(e);
-    return getWorldPositionFromCanvasUV(canvasU, canvasV);
+    return getWorldPositionFromCanvasUV(
+      canvasU,
+      canvasV,
+      suppliedViewSize,
+      suppliedViewTL
+    );
   }
 
   function getCanvasUVFromWorldPosition(
@@ -202,10 +221,12 @@ export default function WosCanvas({
         return;
       }
 
-      const adapter = await navigator.gpu.requestAdapter({
-        powerPreference: "high-performance",
-      });
-      if (adapter === null) {
+      adapterRef.current =
+        adapterRef.current ||
+        (await navigator.gpu.requestAdapter({
+          powerPreference: "high-performance",
+        }));
+      if (adapterRef.current === null) {
         const h = document.querySelector("#title") as HTMLElement;
         h.innerText = "No adapter is available for WebGPU.";
         return;
@@ -223,25 +244,29 @@ export default function WosCanvas({
       uiCanvas.width = canvas.width;
       uiCanvas.height = canvas.height;
 
-      const context = canvas.getContext("webgpu") as GPUCanvasContext;
+      gpuContextRef.current =
+        gpuContextRef.current ||
+        (canvas.getContext("webgpu") as GPUCanvasContext);
 
-      const device = await adapter.requestDevice({
-        requiredLimits: {
-          maxComputeWorkgroupStorageSize:
-            adapter.limits.maxComputeWorkgroupStorageSize,
-          maxStorageBufferBindingSize:
-            adapter.limits.maxStorageBufferBindingSize,
-          maxStorageBuffersPerShaderStage: 10,
-        },
-      });
+      deviceRef.current =
+        deviceRef.current ||
+        (await adapterRef.current.requestDevice({
+          requiredLimits: {
+            maxComputeWorkgroupStorageSize:
+              adapterRef.current.limits.maxComputeWorkgroupStorageSize,
+            maxStorageBufferBindingSize:
+              adapterRef.current.limits.maxStorageBufferBindingSize,
+            maxStorageBuffersPerShaderStage: 10,
+          },
+        }));
 
-      console.log("Device", device);
+      console.log("Device", deviceRef.current);
 
       setRenderer(
         new Renderer(
           canvas,
-          context,
-          device,
+          gpuContextRef.current!,
+          deviceRef.current!,
           boardTL,
           boardSize,
           simRes,
@@ -314,7 +339,7 @@ export default function WosCanvas({
         boundary_value: Math.random(),
       };
     });
-    console.log("Found pads:", drawAbleFootprintPads);
+    // console.log("Found pads:", drawAbleFootprintPads);
 
     const renderSegments: RenderSegment[] = drawAbleSegments.map((segment) => {
       return {
@@ -324,7 +349,7 @@ export default function WosCanvas({
         boundary_value: Math.random(),
       };
     });
-    console.log("Found segments:", drawAbleSegments);
+    // console.log("Found segments:", drawAbleSegments);
 
     await renderer.setCircles(renderCircles, renderSegments);
   }
@@ -335,8 +360,6 @@ export default function WosCanvas({
     if (!ctx) return;
     ctx.clearRect(0, 0, uiCanvasRef.current.width, uiCanvasRef.current.height);
     if (isSelecting && selectionStart && selectionEnd) {
-      console.log("selectionStart", selectionStart);
-      console.log("selectionEnd", selectionEnd);
       const p1 = getCanvasPositionFromWorldPosition(...selectionStart);
       const p2 = getCanvasPositionFromWorldPosition(...selectionEnd);
       ctx.save();
@@ -351,7 +374,7 @@ export default function WosCanvas({
       );
       ctx.restore();
     }
-  }, [uiCanvasRef.current, selectionStart, selectionEnd]);
+  }, [uiCanvasRef.current, selectionStart, selectionEnd, isSelecting]);
 
   useEffect(() => {
     (async () => {
@@ -361,10 +384,21 @@ export default function WosCanvas({
       });
     })();
     console.log("Updated renderer");
-  }, [renderer, viewTL, viewSize, pcbDesign]);
+  }, [renderer, viewTL, viewSize]);
+
+  useEffect(() => {
+    (async () => {
+      await renderer?.updateParams({
+        simTL: simTL,
+        simSize: simSize,
+      });
+    })();
+    console.log("Updated renderer", simTL, simSize);
+  }, [renderer, simTL, simSize]);
 
   useEffect(() => {
     refreshSimulation();
+    console.log("Refreshed simulation");
   }, [renderer, pcbDesign, simTL, simSize]);
 
   const updateTraceWidth = (width: number) => {
@@ -597,7 +631,10 @@ export default function WosCanvas({
             );
             setViewSize(newViewSize);
 
-            const worldPosAfterZoom = getMouseWorldPosition(e.nativeEvent);
+            const worldPosAfterZoom = getMouseWorldPosition(
+              e.nativeEvent,
+              newViewSize
+            );
 
             // Calculate the world space difference and scale it by the new zoom to get the screen space pan adjustment
             const dx = worldPosAfterZoom.x - worldPosBeforeZoom.x;
@@ -668,21 +705,19 @@ export default function WosCanvas({
               }
               setIsSelecting(false);
               if (selectionStart && selectionEnd) {
-                const x1 = selectionStart[0] * viewSize[0] + viewTL[0];
-                const y1 = selectionStart[1] * viewSize[1] + viewTL[1];
-                const x2 = selectionEnd[0] * viewSize[0] + viewTL[0];
-                const y2 = selectionEnd[1] * viewSize[1] + viewTL[1];
-                const minX = Math.min(x1, x2);
-                const minY = Math.min(y1, y2);
-                const maxX = Math.max(x1, x2);
-                const maxY = Math.max(y1, y2);
+                const minX = Math.min(selectionStart[0], selectionEnd[0]);
+                const maxX = Math.max(selectionStart[0], selectionEnd[0]);
+                const minY = Math.min(selectionStart[1], selectionEnd[1]);
+                const maxY = Math.max(selectionStart[1], selectionEnd[1]);
                 const width = maxX - minX;
                 const height = maxY - minY;
-                setSimTL([minX, minY]);
-                setSimSize([width, height]);
-                if (width < 10 || height < 10) {
-                  setSelectionStart(null);
-                  setSelectionEnd(null);
+                console.log("Selected area:", minX, minY, width, height);
+                if (width < 0.1 || height < 0.1) {
+                  setSimTL(boardTL);
+                  setSimSize(boardSize);
+                } else {
+                  setSimTL([minX, minY]);
+                  setSimSize([width, height]);
                 }
 
                 setSelectionStart(null);

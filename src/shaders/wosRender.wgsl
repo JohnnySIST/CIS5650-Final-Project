@@ -34,10 +34,8 @@ fn fragMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let coords = vec2u(pos.xy);
     let index = coords.y * viewRes.x + coords.x;
 
-    let resUV = vec2f(coords) / vec2f(viewRes);
-    let worldPos = resUV * viewSize + viewTL;
-    let simBR = simTL + simSize;
-    let inSim = worldPos.x >= simTL.x && worldPos.x <= simBR.x && worldPos.y >= simTL.y && worldPos.y <= simBR.y;
+    let viewUV = pos.xy / vec2f(viewRes);
+    let worldPos = viewUV * viewSize + viewTL;
 
     let boardBR = boardTL + boardSize;
     let inBoard = worldPos.x >= boardTL.x && worldPos.x <= boardBR.x && worldPos.y >= boardTL.y && worldPos.y <= boardBR.y;
@@ -46,12 +44,16 @@ fn fragMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         return vec4f(0.0, 0.0, 0.0, 1.0);
     }
 
+    let simBR = simTL + simSize;
+    let inSim = worldPos.x >= simTL.x && worldPos.x <= simBR.x && worldPos.y >= simTL.y && worldPos.y <= simBR.y;
+
+
+    let simUV = (worldPos - simTL) / simSize;
     if !inSim {
         return vec4f(0.5, 0.5, 0.5, 1.0);
     }
 
-    let simUV = (worldPos - simTL) / simSize;
-
+    // return vec4f(simUV.x, simUV.y, 0.0, 1.0);
     let simCoords = vec2u(simUV * vec2f(simRes));
     let simIndex = simCoords.y * simRes.x + simCoords.x;
 

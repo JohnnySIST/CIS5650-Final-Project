@@ -148,7 +148,7 @@ fn queryBVH(pos: vec2f) -> vec2f {
 }
 
 fn distanceToBoundary(worldPos: vec2f) -> f32 {
-    let texSizef = vec2f(f32(simRes.x), f32(simRes.y));
+    // let texSizef = vec2f(f32(simRes.x), f32(simRes.y));
 
     let boardBR = boardTL + boardSize;
 
@@ -178,23 +178,23 @@ fn distanceToBoundary(worldPos: vec2f) -> f32 {
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) id: vec3u) {
-    let coords = vec2i(id.xy);
+    // let coords = vec2i(id.xy);
 
-    if u32(coords.x) >= simRes.x || u32(coords.y) >= simRes.y {
+    if id.x >= simRes.x || id.y >= simRes.y {
         return;
     }
 
     let index = id.y * simRes.x + id.x;
 
-    let uv = vec2f(coords) / vec2f(simRes); // [0,1]
+    var uv = vec2f(id.xy) / vec2f(simRes); // [0,1]
 
     let worldPos = uv * simSize + simTL ; // [simTL, simSize + simTL]
 
     let dist = distanceToBoundary(worldPos);
 
-    uv_list[index] = uv;
     if dist < 0.0 {
-        uv_list[index] = vec2f(-1.0, -1.0);
+        uv = vec2f(-1.0, -1.0);
     }
+    uv_list[index] = uv;
 }
   
