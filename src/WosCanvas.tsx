@@ -24,8 +24,10 @@ type EditorMode = "select";
 
 export default function WosCanvas({
   fpsCallback,
+  simulationEnabled,
 }: {
   fpsCallback?: (fps: number) => void;
+  simulationEnabled: boolean;
 }) {
   const webgpuCanvasRef = useRef<HTMLCanvasElement>(null);
   const uiCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -207,6 +209,12 @@ export default function WosCanvas({
   }
 
   useEffect(() => {
+    renderer?.updateParams({
+      simulationEnabled: simulationEnabled,
+    });
+  }, [simulationEnabled]);
+
+  useEffect(() => {
     (async () => {
       if (navigator.gpu === undefined) {
         const h = document.querySelector("#title") as HTMLElement;
@@ -268,6 +276,7 @@ export default function WosCanvas({
           viewRes,
           viewTL,
           viewSize,
+          simulationEnabled,
           fpsCallback
         )
       );
@@ -759,6 +768,9 @@ export default function WosCanvas({
                 setSelectionEnd(null);
               }
             }
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
           }}
         />
       </div>

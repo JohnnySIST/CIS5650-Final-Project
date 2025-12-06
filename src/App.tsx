@@ -5,6 +5,7 @@ import ToggleSwitch from "./ToggleSwitch";
 
 export default function App() {
   const [fps, setFps] = useState(0);
+  const [simEnabled, setSimEnabled] = useState(true);
 
   const fpsCallback = useCallback((fps: number) => {
     setFps(fps);
@@ -12,9 +13,9 @@ export default function App() {
 
   return (
     <>
-      <WosCanvas fpsCallback={fpsCallback} />
+      <WosCanvas fpsCallback={fpsCallback} simulationEnabled={simEnabled} />
       <FpsBadge fps={fps} />
-      <ToggleSwitch labelOn="Sim On" labelOff="Sim Off" />
+      <ToggleSwitch labelOn="Sim On" labelOff="Sim Off" onToggle={setSimEnabled} />
     </>
   );
 }

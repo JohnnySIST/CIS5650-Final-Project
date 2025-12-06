@@ -440,6 +440,7 @@ export class Renderer {
 
   private lastFpsTime: number;
   private frameCount: number = 0;
+  private simulationEnabled: boolean = true;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -453,6 +454,7 @@ export class Renderer {
     viewRes: [number, number] = [canvas.width, canvas.height],
     viewTL: [number, number] = boardTL,
     viewSize: [number, number] = boardSize,
+    simulationEnabled: boolean = true,
     fpsCallback: (fps: number) => void = () => {}
   ) {
     this.canvas = canvas;
@@ -466,6 +468,7 @@ export class Renderer {
     this.viewRes = viewRes;
     this.viewTL = viewTL;
     this.viewSize = viewSize;
+    this.simulationEnabled = simulationEnabled;
     this.fpsCallback = fpsCallback;
     this.init();
     this.lastFpsTime = performance.now();
@@ -491,6 +494,7 @@ export class Renderer {
     viewRes,
     viewTL,
     viewSize,
+    simulationEnabled,
   }: {
     boardTL?: [number, number];
     boardSize?: [number, number];
@@ -500,6 +504,7 @@ export class Renderer {
     viewRes?: [number, number];
     viewTL?: [number, number];
     viewSize?: [number, number];
+    simulationEnabled?: boolean;
   }) {
     const device = this.device;
     const canvas = this.canvas;
@@ -548,6 +553,9 @@ export class Renderer {
         this.viewSize[1],
       ]);
       device.queue.writeBuffer(this.viewSizeBuffer, 0, viewSizeData);
+    }
+    if (simulationEnabled !== undefined) {
+      this.simulationEnabled = simulationEnabled;
     }
   }
 
@@ -917,6 +925,9 @@ export class Renderer {
 
   private frame(simUpdateId: number) {
     if (simUpdateId !== this.simUpdateId) {
+      return;
+    }
+    if (!this.simulationEnabled) {
       return;
     }
 
