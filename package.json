@@ -22,7 +22,7 @@
     "@loaders.gl/ply": "^4.2.2",
     "@mui/material": "^7.3.5",
     "@petamoriken/float16": "^3.8.7",
-    "kicadts": "github:hendrych-upenn/kicadts",
+    "kicadts": "^0.0.22",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "react": "^19.2.0",
