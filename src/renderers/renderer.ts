@@ -398,8 +398,14 @@ export class Renderer {
   // BVH BUFFERS
   private bvhBindGroup_uvPre: GPUBindGroup;
   private bvhBindGroup_compute: GPUBindGroup;
-  private bvhGeomsBuffer: GPUBuffer;
-  private bvhNodeBuffer: GPUBuffer;
+
+  // DIRICHILET
+  private bvhDirGeomsBuffer: GPUBuffer;
+  private bvhDirNodeBuffer: GPUBuffer;
+
+  // NEUMANN
+  private bvhNeuGeomsBuffer: GPUBuffer;
+  private bvhNeuNodeBuffer: GPUBuffer;
 
   private uvBindGroup_compute: GPUBindGroup;
   private domainSizeBindGroup_frag: GPUBindGroup;
@@ -613,22 +619,39 @@ export class Renderer {
     // =============================
 
     // BVH BUFFERS
-    const BVH = buildBVH(circles, segments, 4);
-
-    this.bvhGeomsBuffer = device.createBuffer({
-      label: "bvh geoms buffer",
-      size: BVH.geoms.byteLength,
+    // DIRICHILET
+    const BVH_Dir = buildBVH(circles, [], 16); // CHANGE LATER
+    this.bvhDirGeomsBuffer = device.createBuffer({
+      label: "bvh Dir geoms buffer",
+      size: BVH_Dir.geoms.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    this.bvhNodeBuffer = device.createBuffer({
-      label: "bvh node buffer",
-      size: BVH.nodes.byteLength,
+    this.bvhDirNodeBuffer = device.createBuffer({
+      label: "bvh Dir node buffer",
+      size: BVH_Dir.nodes.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    device.queue.writeBuffer(this.bvhGeomsBuffer, 0, BVH.geoms);
-    device.queue.writeBuffer(this.bvhNodeBuffer, 0, BVH.nodes);
+    device.queue.writeBuffer(this.bvhDirGeomsBuffer, 0, BVH_Dir.geoms);
+    device.queue.writeBuffer(this.bvhDirNodeBuffer, 0, BVH_Dir.nodes);
+
+    // NEUMANN
+    const BVH_Neu = buildBVH([], segments, 16); // CHANGE LATER
+    this.bvhNeuGeomsBuffer = device.createBuffer({
+      label: "bvh Neu geoms buffer",
+      size: BVH_Neu.geoms.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    this.bvhNeuNodeBuffer = device.createBuffer({
+      label: "bvh Neu node buffer",
+      size: BVH_Neu.nodes.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    device.queue.writeBuffer(this.bvhNeuGeomsBuffer, 0, BVH_Neu.geoms);
+    device.queue.writeBuffer(this.bvhNeuNodeBuffer, 0, BVH_Neu.nodes);
 
     // =============================
     //    UV PREPROCESS SETUP
@@ -672,7 +695,6 @@ export class Renderer {
     device.queue.writeBuffer(this.simSizeBuffer, 0, simSizeData);
 
     // board dims
-
     this.boardTLBuffer = device.createBuffer({
       label: "Board TL Buffer",
       size: 8,
@@ -710,8 +732,10 @@ export class Renderer {
       label: "bvh uvPre BG",
       layout: this.uvPre_Pipeline.getBindGroupLayout(2),
       entries: [
-        { binding: 0, resource: { buffer: this.bvhGeomsBuffer } },
-        { binding: 1, resource: { buffer: this.bvhNodeBuffer } },
+        { binding: 0, resource: { buffer: this.bvhDirGeomsBuffer } },
+        { binding: 1, resource: { buffer: this.bvhDirNodeBuffer } },
+        { binding: 2, resource: { buffer: this.bvhNeuGeomsBuffer } },
+        { binding: 3, resource: { buffer: this.bvhNeuNodeBuffer } }
       ],
     });
 
@@ -784,11 +808,13 @@ export class Renderer {
     });
 
     this.bvhBindGroup_compute = device.createBindGroup({
-      label: "bvh bind group",
+      label: "bvh bind group compute",
       layout: this.wos_pipeline.getBindGroupLayout(2),
       entries: [
-        { binding: 0, resource: { buffer: this.bvhGeomsBuffer } },
-        { binding: 1, resource: { buffer: this.bvhNodeBuffer } },
+        { binding: 0, resource: { buffer: this.bvhDirGeomsBuffer } },
+        { binding: 1, resource: { buffer: this.bvhDirNodeBuffer } },
+        { binding: 2, resource: { buffer: this.bvhNeuGeomsBuffer } },
+        { binding: 3, resource: { buffer: this.bvhNeuNodeBuffer } }
       ],
     });
 
