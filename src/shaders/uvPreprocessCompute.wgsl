@@ -39,8 +39,10 @@ struct BVHNode {
 
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 
-@group(2) @binding(0) var<storage> bvhGeo: array<Geom>;
-@group(2) @binding(1) var<storage> bvhNodes: array<BVHNode>;
+@group(2) @binding(0) var<storage> bvhDirGeo: array<Geom>;
+@group(2) @binding(1) var<storage> bvhDirNodes: array<BVHNode>;
+@group(2) @binding(2) var<storage> bvhNeuGeo: array<Geom>;
+@group(2) @binding(3) var<storage> bvhNeuNodes: array<BVHNode>;
 
 fn distanceToSegment(worldPos: vec2f, segment: Segment) -> f32 {
     let AB = segment.end - segment.start;
@@ -64,7 +66,7 @@ fn distanceToAABB(point: vec2f, bbox_min: vec2f, bbox_max: vec2f) -> f32 {
     return sqrt(dx * dx + dy * dy);
 }
 
-fn queryBVH(pos: vec2f) -> vec2f {
+fn queryBVHDir(pos: vec2f) -> f32 {
     var stack_ptr: i32 = 0;
     var stack: array<u32, 32>;
     stack[0] = 0u;
@@ -81,9 +83,9 @@ fn queryBVH(pos: vec2f) -> vec2f {
         let node_idx = stack[u32(stack_ptr)];
         stack_ptr -= 1;
 
-        if node_idx >= arrayLength(&bvhNodes) { continue; }
+        if node_idx >= arrayLength(&bvhDirNodes) { continue; }
 
-        let node = bvhNodes[node_idx];
+        let node = bvhDirNodes[node_idx];
     
     // PRUNE FAR SUBTREES
         let bbox_dist = distanceToAABB(pos, node.bbox_min, node.bbox_max);
@@ -95,9 +97,9 @@ fn queryBVH(pos: vec2f) -> vec2f {
       // TEST FOR LEAF
             for (var i = 0u; i < node.geom_count; i++) {
                 let geom_idx = node.geom_start + i;
-                if geom_idx >= arrayLength(&bvhGeo) { break; }
+                if geom_idx >= arrayLength(&bvhDirGeo) { break; }
 
-                let geom = bvhGeo[geom_idx];
+                let geom = bvhDirGeo[geom_idx];
 
                 var dist: f32;
                 var bVal: f32;
@@ -122,8 +124,8 @@ fn queryBVH(pos: vec2f) -> vec2f {
             }
         } else {
         // RECURSE ON CHILDREN
-            if node.left_child != 0xFFFFFFFFu && node.left_child < arrayLength(&bvhNodes) && stack_ptr < 30 {
-                let left_node = bvhNodes[node.left_child];
+            if node.left_child != 0xFFFFFFFFu && node.left_child < arrayLength(&bvhDirNodes) && stack_ptr < 30 {
+                let left_node = bvhDirNodes[node.left_child];
                 let left_bbox_dist = distanceToAABB(pos, left_node.bbox_min, left_node.bbox_max);
 
                 if left_bbox_dist <= abs(closest_dist) {
@@ -132,8 +134,8 @@ fn queryBVH(pos: vec2f) -> vec2f {
                 }
             }
 
-            if node.right_child != 0xFFFFFFFFu && node.right_child < arrayLength(&bvhNodes) && stack_ptr < 30 {
-                let right_node = bvhNodes[node.right_child];
+            if node.right_child != 0xFFFFFFFFu && node.right_child < arrayLength(&bvhDirNodes) && stack_ptr < 30 {
+                let right_node = bvhDirNodes[node.right_child];
                 let right_bbox_dist = distanceToAABB(pos, right_node.bbox_min, right_node.bbox_max);
 
                 if right_bbox_dist <= abs(closest_dist) {
@@ -144,7 +146,90 @@ fn queryBVH(pos: vec2f) -> vec2f {
         }
     }
 
-    return vec2f(closest_dist, closest_boundary_value);
+    return closest_dist;
+}
+
+fn queryBVHNeu(pos: vec2f) -> f32 {
+    var stack_ptr: i32 = 0;
+    var stack: array<u32, 32>;
+    stack[0] = 0u;
+
+    var closest_dist = 1e10;
+    var closest_boundary_value = 0.0;
+
+    var iterations = 0u;
+
+    while stack_ptr >= 0 {
+        iterations += 1u;
+        if iterations > 200u { break; }
+
+        let node_idx = stack[u32(stack_ptr)];
+        stack_ptr -= 1;
+
+        if node_idx >= arrayLength(&bvhNeuNodes) { continue; }
+
+        let node = bvhNeuNodes[node_idx];
+    
+    // PRUNE FAR SUBTREES
+        let bbox_dist = distanceToAABB(pos, node.bbox_min, node.bbox_max);
+        if bbox_dist > abs(closest_dist) {
+      continue;
+        }
+
+        if node.is_leaf == 1u {
+      // TEST FOR LEAF
+            for (var i = 0u; i < node.geom_count; i++) {
+                let geom_idx = node.geom_start + i;
+                if geom_idx >= arrayLength(&bvhNeuGeo) { break; }
+
+                let geom = bvhNeuGeo[geom_idx];
+
+                var dist: f32;
+                var bVal: f32;
+
+                if geom.geoType == 0u {
+                    if geom.index >= arrayLength(&circles) { continue; }
+                    let circle = circles[geom.index];
+                    dist = length(pos - circle.center) - circle.radius;
+                    bVal = circle.boundary_value;
+                } else {
+                    if geom.index >= arrayLength(&segments) { continue; }
+                    let segment = segments[geom.index];
+                    dist = distanceToSegment(pos, segment);
+                    bVal = segment.boundary_value;
+                }
+        
+        // UPDATE CLOSEST POINT
+                if dist < closest_dist {
+                    closest_dist = dist;
+                    closest_boundary_value = bVal;
+                }
+            }
+        } else {
+        // RECURSE ON CHILDREN
+            if node.left_child != 0xFFFFFFFFu && node.left_child < arrayLength(&bvhNeuNodes) && stack_ptr < 30 {
+                let left_node = bvhNeuNodes[node.left_child];
+                let left_bbox_dist = distanceToAABB(pos, left_node.bbox_min, left_node.bbox_max);
+
+                if left_bbox_dist <= abs(closest_dist) {
+                    stack_ptr += 1;
+                    stack[u32(stack_ptr)] = node.left_child;
+                }
+            }
+
+            if node.right_child != 0xFFFFFFFFu && node.right_child < arrayLength(&bvhNeuNodes) && stack_ptr < 30 {
+                let right_node = bvhNeuNodes[node.right_child];
+                let right_bbox_dist = distanceToAABB(pos, right_node.bbox_min, right_node.bbox_max);
+
+                if right_bbox_dist <= abs(closest_dist) {
+                    stack_ptr += 1;
+                    stack[u32(stack_ptr)] = node.right_child;
+                }
+            }
+        }
+    }
+
+    return closest_dist;
 }
 
 fn distanceToBoundary(worldPos: vec2f) -> f32 {
@@ -172,8 +257,8 @@ fn distanceToBoundary(worldPos: vec2f) -> f32 {
 
    
     // BVH CHECK
-    let bvhResult = queryBVH(worldPos);
-    return min(boxDist, bvhResult[0]);
+    let bvhResult = min(queryBVHDir(worldPos), queryBVHNeu(worldPos));
+    return min(boxDist, bvhResult);
 }
 
 @compute @workgroup_size(8, 8)
