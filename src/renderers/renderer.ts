@@ -1,3 +1,4 @@
+import { FpCircleCenter } from "kicadts";
 import uvPreCompute from "/src/shaders/uvPreprocessCompute.wgsl?raw";
 import wosCompute from "/src/shaders/wosCompute.wgsl?raw";
 import wosRender from "/src/shaders/wosRender.wgsl?raw";
@@ -12,6 +13,292 @@ export interface Segment {
   end: [number, number];
   widthRadius: number;
   boundary_value: number;
+}
+
+interface Geom {
+  type: number; // 0 indicates circle, 1 indicates segment
+  index: number; 
+}
+
+interface BVHNode {
+  bbox_min: [number, number];
+  bbox_max: [number, number];
+  
+  is_leaf: boolean;
+  geom_start: number;
+  geom_count: number;
+  
+  left_child: number;
+  right_child: number;
+}
+
+interface BVH {
+  geoms: Uint32Array;       // LIST OF Geoms
+  nodes: Float32Array;      // LIST OF NODES
+}
+
+interface BVHTreeNode {
+  node: BVHNode;
+  geoms: Geom[];
+  left?: BVHTreeNode;
+  right?: BVHTreeNode;
+}
+
+function computeBBox(
+  geoms: Geom[],
+  circles: Circle[],
+  segments: Segment[]
+): [number, number, number, number] {
+  
+  let minX = Infinity, minY = Infinity;
+  let maxX = -Infinity, maxY = -Infinity;
+  
+  for (const geom of geoms) {
+    if (geom.type === 0) {
+      // CIRCLE
+      const circle = circles[geom.index];
+      minX = Math.min(minX, circle.center[0] - circle.radius);
+      minY = Math.min(minY, circle.center[1] - circle.radius);
+      maxX = Math.max(maxX, circle.center[0] + circle.radius);
+      maxY = Math.max(maxY, circle.center[1] + circle.radius);
+    } else {
+      // SEGMENT
+      const seg = segments[geom.index];
+      const segMinX = Math.min(seg.start[0], seg.end[0]) - seg.widthRadius;
+      const segMinY = Math.min(seg.start[1], seg.end[1]) - seg.widthRadius;
+      const segMaxX = Math.max(seg.start[0], seg.end[0]) + seg.widthRadius;
+      const segMaxY = Math.max(seg.start[1], seg.end[1]) + seg.widthRadius;
+      
+      minX = Math.min(minX, segMinX);
+      minY = Math.min(minY, segMinY);
+      maxX = Math.max(maxX, segMaxX);
+      maxY = Math.max(maxY, segMaxY);
+    }
+  }
+  
+  return [minX, minY, maxX, maxY];
+}
+
+function subdivide (
+  geoms: Geom[],
+  centroids: [number, number][],
+  circles: Circle[],
+  segments: Segment[],
+  leafSize: number,
+): BVHTreeNode {
+  const [minX, minY, maxX, maxY] = computeBBox(geoms, circles, segments);
+  
+  if (geoms.length <= leafSize) {
+    return {
+      node: {
+        bbox_min: [minX, minY],
+        bbox_max: [maxX, maxY],
+        is_leaf: true,
+        geom_start: -1,
+        geom_count: geoms.length,
+        left_child: -1,
+        right_child: -1,
+      },
+      geoms: geoms
+    };
+  }
+  
+  const extentX = maxX - minX;
+  const extentY = maxY - minY;
+
+  var splitAxis: 0 | 1 = 1;
+  if (extentX > extentY) {
+    splitAxis = 0;
+  }
+
+  var mid: number;
+  if (splitAxis == 0) {
+    mid = (maxX - minX) * 0.5 + minX;
+  } else {
+    mid = (maxY - minY) * 0.5 + minY;
+  }
+
+  var leftGeoms: Geom[] = [];
+  var rightGeoms: Geom[] = [];
+
+  geoms.forEach(geo => {
+    var center: [number, number];
+    if (geo.type == 0) {
+      center = centroids[geo.index];
+    } else {
+      center = centroids[geo.index + circles.length];
+    }
+
+    if (center[splitAxis] < mid) {
+      leftGeoms.push(geo);
+    } else {
+      rightGeoms.push(geo);
+    }
+  });
+
+  if (leftGeoms.length === 0 || rightGeoms.length === 0) {
+    leftGeoms = [];
+    rightGeoms = [];
+
+    splitAxis = (splitAxis + 1) % 2;
+    if (splitAxis == 0) {
+      mid = (maxX - minX) * 0.5 + minX;
+    } else {
+      mid = (maxY - minY) * 0.5 + minY;
+    }
+
+    geoms.forEach(geo => {
+      var center: [number, number];
+      if (geo.type == 0) {
+        center = centroids[geo.index];
+      } else {
+        center = centroids[geo.index + circles.length];
+      }
+
+      if (center[splitAxis] < mid) {
+        leftGeoms.push(geo);
+      } else {
+        rightGeoms.push(geo);
+      }
+    });
+  }
+
+  if (leftGeoms.length === 0 || rightGeoms.length === 0) {
+      return {
+        node: {
+          bbox_min: [minX, minY],
+          bbox_max: [maxX, maxY],
+          is_leaf: true,
+          geom_start: -1,
+          geom_count: geoms.length,
+          left_child: -1,
+          right_child: -1,
+        },
+        geoms: geoms
+      };
+  }
+
+  const leftChild = subdivide(leftGeoms, centroids, circles, segments, leafSize);
+  const rightChild = subdivide(rightGeoms, centroids, circles, segments, leafSize);
+
+  return {
+    node: {
+      bbox_min: [minX, minY],
+      bbox_max: [maxX, maxY],
+      is_leaf: false,
+      geom_start: -1,
+      geom_count: -1,
+      left_child: -1,
+      right_child: -1,
+    },
+    geoms: [],
+    left: leftChild,
+    right: rightChild
+  };
+}
+
+function bvhTreeGPU(
+  parent: BVHTreeNode,
+  flatNodes: BVHNode[],
+  flatGeoms: Geom[]
+): number {
+  const myIndex = flatNodes.length;
+  const node = {...parent.node};
+  
+  if (node.is_leaf) {
+    node.geom_start = flatGeoms.length;
+    node.geom_count = parent.geoms.length;
+    flatGeoms.push(...parent.geoms);
+    flatNodes.push(node);
+    
+  } else {
+    flatNodes.push(node);
+
+    const leftIdx = bvhTreeGPU(parent.left!, flatNodes, flatGeoms);
+    const rightIdx = bvhTreeGPU(parent.right!, flatNodes, flatGeoms);
+    
+    // Update child indices
+    flatNodes[myIndex].left_child = leftIdx;
+    flatNodes[myIndex].right_child = rightIdx;
+  }
+  
+  return myIndex;
+}
+
+export function buildBVH(
+  circles: Circle[],
+  segments: Segment[],
+  leafSize: number = 8
+): BVH {
+  const geoms: Geom[] = [];
+  const centroids: [number, number][] = [];
+  
+  circles.forEach((circle, i) => {
+    geoms.push({
+      type: 0,
+      index: i
+    });
+
+    centroids.push([circle.center[0], circle.center[1]]);
+  });
+  
+  segments.forEach((segment, i) => {
+    geoms.push({
+      type: 1,
+      index: i
+    });
+    const centerX = (segment.start[0] + segment.end[0]) / 2;
+    const centerY = (segment.start[1] + segment.end[1]) / 2;
+    centroids.push([centerX, centerY]);
+  });
+
+  const rootNode = subdivide(geoms, centroids, circles, segments, leafSize);
+
+  const flatNodes: BVHNode[] = [];
+  const flatGeoms: Geom[] = [];
+  bvhTreeGPU(rootNode, flatNodes, flatGeoms);
+
+  const circleData = new Float32Array(circles.length * 4);
+    for (let i = 0; i < circles.length; i++) {
+      const offset = i * 4;
+      circleData[offset + 0] = circles[i].center[0];
+      circleData[offset + 1] = circles[i].center[1];
+      circleData[offset + 2] = circles[i].radius;
+      circleData[offset + 3] = circles[i].boundary_value;
+    }
+
+  const geomsData = new Uint32Array(flatGeoms.length * 2);
+  for (let i = 0; i < flatGeoms.length; i++) {
+    const offset = i * 2;
+    geomsData[offset + 0] = flatGeoms[i].type;
+    geomsData[offset + 1] = flatGeoms[i].index;
+  }
+
+  const nodeData = new Float32Array(flatNodes.length * 12);
+  for (let i = 0; i < flatNodes.length; i++) {
+    const offset = i * 12;
+    const node = flatNodes[i];
+    nodeData[offset + 0] = node.bbox_min[0];
+    nodeData[offset + 1] = node.bbox_min[1];
+    nodeData[offset + 2] = node.bbox_max[0];
+    nodeData[offset + 3] = node.bbox_max[1];
+    
+    const uintView = new Uint32Array(nodeData.buffer, (offset + 4) * 4, 5);
+    uintView[0] = node.is_leaf ? 1 : 0;
+    uintView[1] = node.geom_start === -1 ? 0 : node.geom_start;
+    uintView[2] = node.geom_count === -1 ? 0 : node.geom_count;
+    uintView[3] = node.left_child === -1 ? 0xFFFFFFFF : node.left_child;
+    uintView[4] = node.right_child === -1 ? 0xFFFFFFFF : node.right_child;
+
+    uintView[5] = 0;
+    uintView[6] = 0;
+    uintView[7] = 0;
+  }
+
+  return {
+    geoms: geomsData,
+    nodes: nodeData
+  };
 }
 
 const example_circles: Circle[] = [
@@ -88,6 +375,14 @@ export class Renderer {
   private uvBuffer: GPUBuffer;
   private segmentGeomBuffer: GPUBuffer;
 
+  private minMaxBValsBuffer: GPUBuffer;
+
+  // BVH BUFFERS
+  private bvhBindGroup_uvPre: GPUBindGroup;
+  private bvhBindGroup_compute: GPUBindGroup;
+  private bvhGeomsBuffer: GPUBuffer;
+  private bvhNodeBuffer: GPUBuffer;
+
   private uvBindGroup_compute: GPUBindGroup;
   private domainSizeBindGroup_frag: GPUBindGroup;
   private uvBindGroup_frag: GPUBindGroup;
@@ -95,6 +390,7 @@ export class Renderer {
   private domainSizeBindGroup_uvPre: GPUBindGroup;
   private uvBindGroup_uvPre: GPUBindGroup;
 
+  // SIM BUFFERS
   private wos_pipeline: GPUComputePipeline;
   private renderPipeline: GPURenderPipeline;
   private uvPre_Pipeline: GPUComputePipeline;
@@ -108,6 +404,8 @@ export class Renderer {
   private viewRes: [number, number]; // integers, pixels
   private viewTL: [number, number]; // floats, world space
   private viewSize: [number, number]; // floats, world space
+
+  private minMaxBvals: [number, number]; // STORES THE MIN AND MAX B VALUE FOR COLOR REMAPPING
 
   private simUpdateId: number = 0;
 
@@ -214,6 +512,8 @@ export class Renderer {
     const context = this.context;
     const device = this.device;
 
+    this.minMaxBvals = [0.0, 0.0]; // [MIN, MAX]
+
     const circleData = new Float32Array(circles.length * 4);
     for (let i = 0; i < circles.length; i++) {
       const offset = i * 4;
@@ -221,6 +521,14 @@ export class Renderer {
       circleData[offset + 1] = circles[i].center[1]; // center.y
       circleData[offset + 2] = circles[i].radius;
       circleData[offset + 3] = circles[i].boundary_value;
+
+      if (circles[i].boundary_value < this.minMaxBvals[0]) {
+        this.minMaxBvals[0] = circles[i].boundary_value;
+      }
+
+      if (circles[i].boundary_value > this.minMaxBvals[1]) {
+        this.minMaxBvals[1] = circles[i].boundary_value;
+      }
     }
 
     this.circleGeomBuffer = device.createBuffer({
@@ -240,6 +548,14 @@ export class Renderer {
       segmentData[offset + 3] = segments[i].end[1]; // end.y
       segmentData[offset + 4] = segments[i].widthRadius;
       segmentData[offset + 5] = segments[i].boundary_value;
+
+      if (segments[i].boundary_value < this.minMaxBvals[0]) {
+        this.minMaxBvals[0] = segments[i].boundary_value;
+      }
+
+      if (segments[i].boundary_value > this.minMaxBvals[1]) {
+        this.minMaxBvals[1] = segments[i].boundary_value;
+      }
     }
 
     this.segmentGeomBuffer = device.createBuffer({
@@ -249,6 +565,28 @@ export class Renderer {
     });
 
     device.queue.writeBuffer(this.segmentGeomBuffer, 0, segmentData);
+
+    // =============================
+    // SETUP A BVH BUFFERS HERE 
+    // =============================
+    
+    // BVH BUFFERS 
+    const BVH = buildBVH(circles, segments, 4);
+
+    this.bvhGeomsBuffer = device.createBuffer({
+      label: 'bvh geoms buffer',
+      size: BVH.geoms.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    this.bvhNodeBuffer = device.createBuffer({
+      label: 'bvh node buffer',
+      size: BVH.nodes.byteLength, 
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    });
+
+    device.queue.writeBuffer(this.bvhGeomsBuffer, 0, BVH.geoms);
+    device.queue.writeBuffer(this.bvhNodeBuffer, 0, BVH.nodes);
 
     // =============================
     //    UV PREPROCESS SETUP
@@ -271,7 +609,6 @@ export class Renderer {
     });
 
     const simResData = new Uint32Array(this.simRes);
-
     device.queue.writeBuffer(this.simResBuffer, 0, simResData);
 
     this.simTLBuffer = device.createBuffer({
@@ -281,7 +618,6 @@ export class Renderer {
     });
 
     const simTLData = new Float32Array(this.simTL);
-
     device.queue.writeBuffer(this.simTLBuffer, 0, simTLData);
 
     this.simSizeBuffer = device.createBuffer({
@@ -291,11 +627,9 @@ export class Renderer {
     });
 
     const simSizeData = new Float32Array(this.simSize);
-
     device.queue.writeBuffer(this.simSizeBuffer, 0, simSizeData);
 
     // BIND GEOMETRY DATA
-
     this.domainSizeBindGroup_uvPre = device.createBindGroup({
       label: "domain size uvPre bg",
       layout: this.uvPre_Pipeline.getBindGroupLayout(0),
@@ -307,6 +641,16 @@ export class Renderer {
         { binding: 4, resource: { buffer: this.segmentGeomBuffer } },
       ],
     });
+
+    this.bvhBindGroup_uvPre = device.createBindGroup({
+      label: "bvh uvPre BG",
+      layout: this.uvPre_Pipeline.getBindGroupLayout(2),
+      entries: [
+        { binding: 0, resource: { buffer: this.bvhGeomsBuffer} },
+        { binding: 1, resource: { buffer: this.bvhNodeBuffer} }
+      ]
+    });
+
 
     // THIS STORES UVs ON SCREEN FOR QUEERY POINTS
     this.uvBuffer = device.createBuffer({
@@ -374,6 +718,15 @@ export class Renderer {
       ],
     });
 
+    this.bvhBindGroup_compute = device.createBindGroup({
+      label: 'bvh bind group',
+      layout: this.wos_pipeline.getBindGroupLayout(2),
+      entries: [
+        { binding: 0, resource: { buffer: this.bvhGeomsBuffer} },
+        { binding: 1, resource: { buffer: this.bvhNodeBuffer } }
+      ]
+    });
+
     // ======================================
     //    OUTPUT VERT / FRAG FOR RENDERING
     // ======================================
@@ -424,8 +777,15 @@ export class Renderer {
     });
 
     const viewSizeData = new Float32Array(this.viewSize);
-
     device.queue.writeBuffer(this.viewSizeBuffer, 0, viewSizeData);
+
+    this.minMaxBValsBuffer = device.createBuffer({
+      label: 'min max bval buffer',
+      size: 8,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    device.queue.writeBuffer(this.minMaxBValsBuffer, 0, new Float32Array(this.minMaxBvals));
 
     this.domainSizeBindGroup_frag = device.createBindGroup({
       label: "domain size frag bg",
@@ -438,6 +798,7 @@ export class Renderer {
         { binding: 4, resource: { buffer: this.viewTLBuffer } },
         { binding: 5, resource: { buffer: this.viewSizeBuffer } },
         { binding: 6, resource: { buffer: this.walkCountBuffer } },
+        { binding: 7, resource: { buffer: this.minMaxBValsBuffer } }
       ],
     });
 
@@ -480,13 +841,15 @@ export class Renderer {
     uvPreComputePass.setPipeline(this.uvPre_Pipeline);
     uvPreComputePass.setBindGroup(0, this.domainSizeBindGroup_uvPre);
     uvPreComputePass.setBindGroup(1, this.uvBindGroup_uvPre);
+    uvPreComputePass.setBindGroup(2, this.bvhBindGroup_uvPre);
+
     const wgSize_Pre = 8;
     const dispatchX_Pre = Math.ceil(this.simRes[0] / wgSize_Pre);
     const dispatchY_Pre = Math.ceil(this.simRes[1] / wgSize_Pre);
     uvPreComputePass.dispatchWorkgroups(dispatchX_Pre, dispatchY_Pre);
     uvPreComputePass.end();
 
-    this.totalWalks += 4; // IF YOU UPDATE THIS, UPDATE NUMBER IN wosCompute AND wosRender
+    this.totalWalks += 1; // IF YOU UPDATE THIS, UPDATE NUMBER IN wosCompute AND wosRender
 
     device.queue.writeBuffer(
       this.walkCountBuffer,
@@ -498,6 +861,7 @@ export class Renderer {
     wosComputePass.setPipeline(this.wos_pipeline);
     wosComputePass.setBindGroup(0, this.domainSizeBindGroup_wos);
     wosComputePass.setBindGroup(1, this.uvBindGroup_compute);
+    wosComputePass.setBindGroup(2, this.bvhBindGroup_compute);
     const wgSize = 8;
     const dispatchX_wos = Math.ceil(this.simRes[0] / wgSize);
     const dispatchY_wos = Math.ceil(this.simRes[1] / wgSize);
