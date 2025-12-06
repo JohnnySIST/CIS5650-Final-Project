@@ -315,11 +315,10 @@ function bvhTreeGPU(
   return myIndex;
 }
 
-
 export function buildBVH(
   circles: Circle[],
   segments: Segment[],
-  leafSize: number = 4
+  leafSize: number = 8
 ): BVH {
   const geoms: Geom[] = [];
   const centroids: [number, number][] = [];
@@ -352,8 +351,8 @@ export function buildBVH(
   const circleData = new Float32Array(circles.length * 4);
     for (let i = 0; i < circles.length; i++) {
       const offset = i * 4;
-      circleData[offset + 0] = circles[i].center[0]; // center.x
-      circleData[offset + 1] = circles[i].center[1]; // center.y
+      circleData[offset + 0] = circles[i].center[0];
+      circleData[offset + 1] = circles[i].center[1];
       circleData[offset + 2] = circles[i].radius;
       circleData[offset + 3] = circles[i].boundary_value;
     }
@@ -381,9 +380,9 @@ export function buildBVH(
     uintView[3] = node.left_child === -1 ? 0xFFFFFFFF : node.left_child;
     uintView[4] = node.right_child === -1 ? 0xFFFFFFFF : node.right_child;
 
-    uintView[5] = 0; // _pad0
-    uintView[6] = 0; // _pad1
-    uintView[7] = 0; // _pad2
+    uintView[5] = 0;
+    uintView[6] = 0;
+    uintView[7] = 0;
   }
 
   return {
@@ -465,6 +464,8 @@ export class Renderer {
   private wosValuesBuffer: GPUBuffer;
   private uvBuffer: GPUBuffer;
   private segmentGeomBuffer: GPUBuffer;
+
+  private minMaxBValsBuffer: GPUBuffer;
   
   // GRID BUFFERS:
   private gridBindGroup_uvPre: GPUBindGroup;
@@ -485,6 +486,7 @@ export class Renderer {
   private domainSizeBindGroup_uvPre: GPUBindGroup;
   private uvBindGroup_uvPre: GPUBindGroup;
 
+  // SIM BUFFERS
   private wos_pipeline: GPUComputePipeline;
   private renderPipeline: GPURenderPipeline;
   private uvPre_Pipeline: GPUComputePipeline;
@@ -498,6 +500,8 @@ export class Renderer {
   private viewRes: [number, number]; // integers, pixels
   private viewTL: [number, number]; // floats, world space
   private viewSize: [number, number]; // floats, world space
+
+  private minMaxBvals: [number, number]; // STORES THE MIN AND MAX B VALUE FOR COLOR REMAPPING
 
   private simUpdateId: number = 0;
 
@@ -596,6 +600,8 @@ export class Renderer {
     const context = this.context;
     const device = this.device;
 
+    this.minMaxBvals = [0.0, 0.0]; // [MIN, MAX]
+
     const circleData = new Float32Array(circles.length * 4);
     for (let i = 0; i < circles.length; i++) {
       const offset = i * 4;
@@ -603,6 +609,14 @@ export class Renderer {
       circleData[offset + 1] = circles[i].center[1]; // center.y
       circleData[offset + 2] = circles[i].radius;
       circleData[offset + 3] = circles[i].boundary_value;
+
+      if (circles[i].boundary_value < this.minMaxBvals[0]) {
+        this.minMaxBvals[0] = circles[i].boundary_value;
+      }
+
+      if (circles[i].boundary_value > this.minMaxBvals[1]) {
+        this.minMaxBvals[1] = circles[i].boundary_value;
+      }
     }
 
     this.circleGeomBuffer = device.createBuffer({
@@ -622,6 +636,14 @@ export class Renderer {
       segmentData[offset + 3] = segments[i].end[1]; // end.y
       segmentData[offset + 4] = segments[i].widthRadius;
       segmentData[offset + 5] = segments[i].boundary_value;
+
+      if (segments[i].boundary_value < this.minMaxBvals[0]) {
+        this.minMaxBvals[0] = segments[i].boundary_value;
+      }
+
+      if (segments[i].boundary_value > this.minMaxBvals[1]) {
+        this.minMaxBvals[1] = segments[i].boundary_value;
+      }
     }
 
     this.segmentGeomBuffer = device.createBuffer({
@@ -674,6 +696,9 @@ export class Renderer {
       size: BVH.nodes.byteLength, 
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     });
+
+    device.queue.writeBuffer(this.bvhGeomsBuffer, 0, BVH.geoms);
+    device.queue.writeBuffer(this.bvhNodeBuffer, 0, BVH.nodes);
 
     // =============================
     //    UV PREPROCESS SETUP
@@ -878,8 +903,15 @@ export class Renderer {
     });
 
     const viewSizeData = new Float32Array(this.viewSize);
-
     device.queue.writeBuffer(this.viewSizeBuffer, 0, viewSizeData);
+
+    this.minMaxBValsBuffer = device.createBuffer({
+      label: 'min max bval buffer',
+      size: 8,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    device.queue.writeBuffer(this.minMaxBValsBuffer, 0, new Float32Array(this.minMaxBvals));
 
     this.domainSizeBindGroup_frag = device.createBindGroup({
       label: "domain size frag bg",
@@ -892,6 +924,7 @@ export class Renderer {
         { binding: 4, resource: { buffer: this.viewTLBuffer } },
         { binding: 5, resource: { buffer: this.viewSizeBuffer } },
         { binding: 6, resource: { buffer: this.walkCountBuffer } },
+        { binding: 7, resource: { buffer: this.minMaxBValsBuffer } }
       ],
     });
 

@@ -232,7 +232,7 @@ fn distanceToBoundaryWoS(pos: vec2f) -> vec2f {
 fn walkOnSpheres(startPos: vec2f, rngState: ptr<function, u32>) -> f32 {
     var pos = startPos;
     var temp = 0.0;
-    let epsilon = 0.1; // was 2.0
+    let epsilon = 0.05; // was 2.0
     let maxSteps = 20;
 
     for (var step = 0; step < maxSteps; step++) {
@@ -459,7 +459,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     var seed = coords.x * 747796405u + coords.y * 2891336453u * totalWalks;
 
     for (var i = 0u; i < numWalks; i++) {
-        let temp =  walkOnStars(worldPos, &seed);//walkOnSpheres(worldPos, &seed);//
+        let temp = walkOnStars(worldPos, &seed);//walkOnSpheres(worldPos, &seed);//
         totalTemp += temp;
     }
 

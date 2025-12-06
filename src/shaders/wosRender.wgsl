@@ -5,6 +5,7 @@
 @group(0) @binding(4) var<uniform> viewTL: vec2f;
 @group(0) @binding(5) var<uniform> viewSize: vec2f;
 @group(0) @binding(6) var<uniform> totalWalks: u32;
+@group(0) @binding(7) var<uniform> minMaxBVals: vec2f;
 
 // @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 @group(1) @binding(0) var<storage, read_write> wos_valueList: array<f32>;
@@ -53,15 +54,32 @@ fn fragMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     if temp < 0.0 {
         return vec4f(0.0, 0.0, 0.0, 1.0);
     } else {
-        //twoToneColor(temp / f32(totalWalks));
-        //let outColor = color(vec3f(0.5, 0.5, 0.5), vec3f(0.5, 0.5, 0.5), vec3f(1.0, 1.0, 1.0), vec3f(0.00, 0.33, 0.67), temp / f32(totalWalks));
+        let avgTemp =  (temp / f32(totalWalks) + 0.35); // +0.35 to offset color pallet
+         let normalizedTemp = (avgTemp - minMaxBVals.x) / (minMaxBVals.y - minMaxBVals.x);
+        //let outColor = twoToneColor(temp / f32(totalWalks));
         let outColor = color(
-            vec3f(0.300, 0.500, 0.700),  // a
-            vec3f(0.700, 0.500, 0.300),  // b
-            vec3f(1.000, 1.000, 1.000),  // c
-            vec3f(0.000, 0.150, 0.350),  // d
-            temp / f32(totalWalks)
+            vec3f(0.5, 0.5, 0.5),
+            vec3f(0.5, 0.5, 0.5),
+            vec3f(1.0, 1.0, 1.0),
+            vec3f(0.00, 0.33, 0.67),
+            normalizedTemp
         );
+       
+        // let outColor = color(
+        //     vec3f(0.300, 0.500, 0.700),  // a
+        //     vec3f(0.700, 0.500, 0.300),  // b
+        //     vec3f(1.000, 1.000, 1.000),  // c
+        //     vec3f(0.000, 0.150, 0.350),  // d
+        //     normalizedTemp + 0.5
+        // );
+
+        // let outColor = color(
+        //     vec3f(0.500, 0.000, 0.500),  // a
+        //     vec3f(0.500, 0.000, 0.500),  // b
+        //     vec3f(1.000, 1.000, 1.000),  // c
+        //     vec3f(0.000, 0.330, 0.670),  // d
+        //     normalizedTemp + 0.5
+        // );
         //let outColor = color(vec3f(0.5, 0.5, 0.5), vec3f(0.5, 0.5, 0.5), vec3f(2.0, 1.0, 0.0), vec3f(0.5, 0.2, 0.25), temp / f32(totalWalks));
         return vec4f(outColor, 1.0);
     }
