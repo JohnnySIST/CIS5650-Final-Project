@@ -4,10 +4,15 @@ struct Circle {
     boundary_value: f32 // ASSUME DIRCHLE BOUNDARY FOR NOW 
 }
 
-struct NeumannHit {
+struct boundaryHit {
     dist: f32,
-    normal: vec2f,
-    flux: f32
+    value: f32,
+    normal: vec2f // ONLY USED IF BOUNDARY IS NEUMANN
+}
+
+struct WoStBoundaryQuery {
+    dirichletHit: boundaryHit,
+    neumannHit: boundaryHit
 }
 
 struct Segment {
@@ -20,6 +25,7 @@ struct Segment {
 struct Geom {
   geoType: u32,
   index: u32,
+  boundaryType: u32
 }
 
 struct BVHNode {
@@ -243,6 +249,9 @@ fn walkOnSpheres(startPos: vec2f, rngState: ptr<function, u32>) -> f32 {
 }
 
 // WALK ON STARS
+
+
+
 fn dTBDirichlet(pos: vec2f) -> vec2f {
     var circleDistFinal = length(pos - circles[0].center) - circles[0].radius;
     var circlebValFinal = circles[0].boundary_value;
@@ -270,19 +279,19 @@ fn dTBDirichlet(pos: vec2f) -> vec2f {
     return result;
 }
 
-fn disttanceToCircleNeumann(worldPos: vec2f, circle: Circle) -> NeumannHit {
+fn disttanceToCircleNeumann(worldPos: vec2f, circle: Circle) -> boundaryHit {
     let circleDist = length(worldPos - circle.center) - circle.radius;
     let circleNorm = normalize(worldPos - circle.center);
     let circleFlux = circle.boundary_value;
 
-    return NeumannHit(
+    return boundaryHit(
         circleDist,
-        circleNorm,
-        circleFlux
+        circleFlux,
+        circleNorm
     );
 }
 
-fn distanceToSegmentNeumann(worldPos: vec2f, segment: Segment) -> NeumannHit {
+fn distanceToSegmentNeumann(worldPos: vec2f, segment: Segment) -> boundaryHit {
     let AB = segment.end - segment.start;
     let AP = worldPos - segment.start;
     let t = dot(AP, AB) / dot(AB, AB);
@@ -303,14 +312,14 @@ fn distanceToSegmentNeumann(worldPos: vec2f, segment: Segment) -> NeumannHit {
         segNorm *= -1.0;
     }
 
-    return NeumannHit(
+    return boundaryHit(
         segDist,
-        segNorm,
-        segFlux
+        segFlux,
+        segNorm
     );
 }
 
-fn dTBNeumann(pos: vec2f) -> NeumannHit {
+fn dTBNeumann(pos: vec2f) -> boundaryHit {
     let simBR = simTL + simSize;
     let flux = 0.0; // BOUNDARY FLUX 0 
 
@@ -345,12 +354,121 @@ fn dTBNeumann(pos: vec2f) -> NeumannHit {
     if (segmentFinal.dist < boxDist) {
         return segmentFinal;
     } else {
-        return NeumannHit(
+        return boundaryHit(
             boxDist,
-            boxNormal,
-            flux
+            flux,
+            boxNormal
         );
     }
+}
+
+fn queryBVHWoStr(pos: vec2f, bType: u32) -> boundaryHit { // 0: DIR, 1: NEU
+  var stack_ptr: i32 = 0;
+  var stack: array<u32, 32>;
+  stack[0] = 0u;
+  
+  var closest_dist = 1e10;
+  var closest_boundary_value = 0.0;
+  var closest_norm = vec2f(0.0, 0.0);
+  
+  var iterations = 0u;
+  
+  while (stack_ptr >= 0) {
+    iterations += 1u;
+    if (iterations > 200u) { break; } // Safety
+    
+    let node_idx = stack[u32(stack_ptr)];
+    stack_ptr -= 1;
+    
+    if (node_idx >= arrayLength(&bvhNodes)) { continue; }
+    
+    let node = bvhNodes[node_idx];
+    
+    // PRUNE FAR SUBTREES
+    let bbox_dist = distanceToAABB(pos, node.bbox_min, node.bbox_max);
+    if (bbox_dist > abs(closest_dist)) {
+      continue;
+    }
+    
+    if (node.is_leaf == 1u) {
+      // TEST FOR LEAF
+      for (var i = 0u; i < node.geom_count; i++) {
+        let geom_idx = node.geom_start + i;
+        if (geom_idx >= arrayLength(&bvhGeo)) { break; }
+        
+        let geom = bvhGeo[geom_idx];
+        
+        var dist: f32;
+        var bVal: f32;
+        var bNorm: vec2f;
+        let curBType = geom.boundaryType;
+        
+        // NEEDS TO TAKE IN TO ACCOUNT BOUNDARY TYPE
+        if (geom.geoType == 0u) {
+          if (geom.index >= arrayLength(&circles)) { continue; }
+          let circle = circles[geom.index];
+          if (geom.boundaryType == 0) {
+            dist = length(pos - circle.center) - circle.radius;
+            bVal = circle.boundary_value;
+            bNorm = vec2f(0.0);
+          } else {
+            let neuResult = disttanceToCircleNeumann(pos, circle);
+            dist = neuResult.dist;
+            bVal = neuResult.value;
+            bNorm = neuResult.normal;
+          }
+
+        } else {
+          if (geom.index >= arrayLength(&segments)) { continue; }
+          let segment = segments[geom.index];
+          if (geom.boundaryType == 0) {
+            dist = distanceToSegment(pos, segment);
+            bVal = segment.boundary_value;
+            bNorm = vec2f(0.0);
+          } else {
+            let neuResult = distanceToSegmentNeumann(pos, segment);
+            dist = neuResult.dist;
+            bVal = neuResult.value;
+            bNorm = neuResult.normal;
+          }
+        }
+        
+        // UPDATE CLOSEST POINT IF BOUNDARY TYPE IS RIGHT
+        if (curBType == bType && abs(dist) < abs(closest_dist)) {
+          closest_dist = dist;
+          closest_boundary_value = bVal;
+          closest_norm = bNorm;
+        }
+      }
+    } else {
+        // RECURSE ON CHILDREN
+        if (node.left_child != 0xFFFFFFFFu && node.left_child < arrayLength(&bvhNodes) && stack_ptr < 30) {
+            let left_node = bvhNodes[node.left_child];
+            let left_bbox_dist = distanceToAABB(pos, left_node.bbox_min, left_node.bbox_max);
+            
+            if (left_bbox_dist <= abs(closest_dist)) {
+                stack_ptr += 1;
+                stack[u32(stack_ptr)] = node.left_child;
+            }
+        }
+        
+        if (node.right_child != 0xFFFFFFFFu && node.right_child < arrayLength(&bvhNodes) && stack_ptr < 30) {
+            let right_node = bvhNodes[node.right_child];
+            let right_bbox_dist = distanceToAABB(pos, right_node.bbox_min, right_node.bbox_max);
+            
+            if (right_bbox_dist <= abs(closest_dist)) {
+                stack_ptr += 1;
+                stack[u32(stack_ptr)] = node.right_child;
+            }
+        }
+    }
+  }
+  
+  return boundaryHit(
+    closest_dist,
+    closest_boundary_value,
+    closest_norm
+  );
 }
 
 fn sampleHemisphere(normal: vec2f, rngState: ptr<function, u32>) -> vec2f {
@@ -378,20 +496,17 @@ fn walkOnStars(startPos: vec2f, rngState: ptr<function, u32>) -> f32 {
     var onNeumann = false;
     var neumannNorm = vec2f(0.0);
 
-    // REMOVE THESE WHITH BVH REMOVEALL:
-    let magic = bvhGeo[0];
-    let moreMagic = bvhNodes[0];
 
     for (var step = 0; step < maxSteps; step++) {
-        let boundaryResult = dTBDirichlet(pos);
-        let dDist = boundaryResult[0];
-        let temp = boundaryResult[1];
+        let boundaryResult = queryBVHWoStr(pos, 0);
+        let dDist = boundaryResult.dist;
+        let temp = boundaryResult.value;
 
         if dDist < epsilon {
             return temp + accumulatedFlux;
         }
 
-        let n1 = dTBNeumann(pos);
+        let n1 = queryBVHWoStr(pos, 1);
         let starRadius = max(rMin, min(dDist, n1.dist) * 0.99);
 
         var dir: vec2f;
@@ -403,14 +518,14 @@ fn walkOnStars(startPos: vec2f, rngState: ptr<function, u32>) -> f32 {
         }
 
         let offset = pos + dir * starRadius;
-        let n2 = dTBNeumann(offset);
+        let n2 = queryBVHWoStr(offset, 1);
 
         if (n1.dist * n2.dist < 0.0) {
             let nBoundaryPoint = pos + dir * n1.dist * 0.99;
 
-            if (abs(n1.flux) > 0.0001) {
+            if (abs(n1.value) > 0.0001) {
                 let G = greensFunctionBall2D(pos, nBoundaryPoint, starRadius);
-                accumulatedFlux -= G * n1.flux;
+                accumulatedFlux -= G * n1.value;
             }
 
             pos = nBoundaryPoint;
@@ -435,8 +550,8 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
         return;
     }
 
-  // IGNOR UVs FOR QUEERY POINTS NOT IN BOUNDARY
-  // CHANGE LATER SO THREADS NEVER RUN ON THESE TYPES OF POINTS (Stream Compaction :D)
+    // IGNOR UVs FOR QUEERY POINTS NOT IN BOUNDARY
+    // CHANGE LATER SO THREADS NEVER RUN ON THESE TYPES OF POINTS (Stream Compaction :D)
     if uv.x < 0.0 || uv.y < 0.0 {
         wos_valueList[index] = -1.0;
         return;
@@ -449,7 +564,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     var seed = coords.x * 747796405u + coords.y * 2891336453u * totalWalks;
 
     for (var i = 0u; i < numWalks; i++) {
-        let temp = walkOnSpheres(worldPos, &seed);//walkOnStars(worldPos, &seed);//
+        let temp = walkOnStars(worldPos, &seed);//walkOnSpheres(worldPos, &seed);//
         totalTemp += temp;
     }
 

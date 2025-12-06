@@ -17,7 +17,8 @@ export interface Segment {
 
 interface Geom {
   type: number; // 0 indicates circle, 1 indicates segment
-  index: number; 
+  index: number;
+  boundaryType: number; // 0 FOR DIRICHILET, 1 FOR NEUMANN
 }
 
 interface BVHNode {
@@ -87,7 +88,8 @@ function subdivide (
   leafSize: number,
 ): BVHTreeNode {
   const [minX, minY, maxX, maxY] = computeBBox(geoms, circles, segments);
-  
+
+  // CREATE LEAF NODE
   if (geoms.length <= leafSize) {
     return {
       node: {
@@ -103,6 +105,7 @@ function subdivide (
     };
   }
   
+  // COMPUTE LONGEST SPLIT AXIS
   const extentX = maxX - minX;
   const extentY = maxY - minY;
 
@@ -118,9 +121,9 @@ function subdivide (
     mid = (maxY - minY) * 0.5 + minY;
   }
 
+  // SPLIT ALONG SPLIT AXIS
   var leftGeoms: Geom[] = [];
   var rightGeoms: Geom[] = [];
-
   geoms.forEach(geo => {
     var center: [number, number];
     if (geo.type == 0) {
@@ -136,6 +139,7 @@ function subdivide (
     }
   });
 
+  // SAFETY INCASE GEOMETRY DOESN"T SPLIT WELL ALONG MAIN AXIS
   if (leftGeoms.length === 0 || rightGeoms.length === 0) {
     leftGeoms = [];
     rightGeoms = [];
@@ -163,6 +167,7 @@ function subdivide (
     });
   }
 
+  // FINAL SAFETY : FORCE A LEAF
   if (leftGeoms.length === 0 || rightGeoms.length === 0) {
       return {
         node: {
@@ -178,9 +183,11 @@ function subdivide (
       };
   }
 
+  // RECURSE ON SUB TREES
   const leftChild = subdivide(leftGeoms, centroids, circles, segments, leafSize);
   const rightChild = subdivide(rightGeoms, centroids, circles, segments, leafSize);
 
+  // RETURN FINAL / ROOT NODE
   return {
     node: {
       bbox_min: [minX, minY],
@@ -197,6 +204,7 @@ function subdivide (
   };
 }
 
+// THIS CONVERTS THE TREE STRUCTURE TO GPU READY ARRAYS
 function bvhTreeGPU(
   parent: BVHTreeNode,
   flatNodes: BVHNode[],
@@ -217,7 +225,7 @@ function bvhTreeGPU(
     const leftIdx = bvhTreeGPU(parent.left!, flatNodes, flatGeoms);
     const rightIdx = bvhTreeGPU(parent.right!, flatNodes, flatGeoms);
     
-    // Update child indices
+    // ADD NODES TO NODE ARRAY
     flatNodes[myIndex].left_child = leftIdx;
     flatNodes[myIndex].right_child = rightIdx;
   }
@@ -225,6 +233,7 @@ function bvhTreeGPU(
   return myIndex;
 }
 
+// 
 export function buildBVH(
   circles: Circle[],
   segments: Segment[],
@@ -233,10 +242,12 @@ export function buildBVH(
   const geoms: Geom[] = [];
   const centroids: [number, number][] = [];
   
+  // PRECOMPUTE CENTROIDS
   circles.forEach((circle, i) => {
     geoms.push({
       type: 0,
-      index: i
+      index: i,
+      boundaryType: 0
     });
 
     centroids.push([circle.center[0], circle.center[1]]);
@@ -245,33 +256,29 @@ export function buildBVH(
   segments.forEach((segment, i) => {
     geoms.push({
       type: 1,
-      index: i
+      index: i,
+      boundaryType: 0
     });
     const centerX = (segment.start[0] + segment.end[0]) / 2;
     const centerY = (segment.start[1] + segment.end[1]) / 2;
     centroids.push([centerX, centerY]);
   });
 
+  // BUILD TREE
   const rootNode = subdivide(geoms, centroids, circles, segments, leafSize);
 
   const flatNodes: BVHNode[] = [];
   const flatGeoms: Geom[] = [];
+  // CONVERT TO GPU
   bvhTreeGPU(rootNode, flatNodes, flatGeoms);
 
-  const circleData = new Float32Array(circles.length * 4);
-    for (let i = 0; i < circles.length; i++) {
-      const offset = i * 4;
-      circleData[offset + 0] = circles[i].center[0];
-      circleData[offset + 1] = circles[i].center[1];
-      circleData[offset + 2] = circles[i].radius;
-      circleData[offset + 3] = circles[i].boundary_value;
-    }
-
-  const geomsData = new Uint32Array(flatGeoms.length * 2);
+  // FLATTEN DATA FOR GPU BUFFERS
+  const geomsData = new Uint32Array(flatGeoms.length * 3);
   for (let i = 0; i < flatGeoms.length; i++) {
-    const offset = i * 2;
+    const offset = i * 3;
     geomsData[offset + 0] = flatGeoms[i].type;
     geomsData[offset + 1] = flatGeoms[i].index;
+    geomsData[offset + 2] = flatGeoms[i].boundaryType;
   }
 
   const nodeData = new Float32Array(flatNodes.length * 12);
@@ -563,7 +570,7 @@ export class Renderer {
     // =============================
     
     // BVH BUFFERS 
-    const BVH = buildBVH(circles, segments, 4);
+    const BVH = buildBVH(circles, segments, 16);
 
     this.bvhGeomsBuffer = device.createBuffer({
       label: 'bvh geoms buffer',
@@ -642,7 +649,6 @@ export class Renderer {
         { binding: 1, resource: { buffer: this.bvhNodeBuffer} }
       ]
     });
-
 
     // THIS STORES UVs ON SCREEN FOR QUEERY POINTS
     this.uvBuffer = device.createBuffer({
@@ -832,6 +838,7 @@ export class Renderer {
     uvPreComputePass.dispatchWorkgroups(dispatchX_Pre, dispatchY_Pre);
     uvPreComputePass.end();
 
+    // PROBABLY JUST LEAVE THIS AS 1 -> 1 WALK PER COMPUTE THREAD
     this.totalWalks += 1; // IF YOU UPDATE THIS, UPDATE NUMBER IN wosCompute AND wosRender
 
     device.queue.writeBuffer(

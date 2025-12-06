@@ -14,6 +14,7 @@ struct Segment {
 struct Geom {
   geoType: u32,
   index: u32,
+  boundaryType: u32
 }
 
 struct BVHNode {
