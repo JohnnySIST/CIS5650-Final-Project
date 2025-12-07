@@ -743,7 +743,15 @@ export class Renderer {
 
     // BVH BUFFERS
     // DIRICHILET
-    const BVH_Dir = buildBVH(circles, [], 8); // CHANGE LATER
+
+    const dir_circles = circles.filter(
+      (circle) => circle.boundary_type === BoundaryType.DIRICHILET
+    );
+    const dir_segments = segments.filter(
+      (segment) => segment.boundary_type === BoundaryType.DIRICHILET
+    );
+
+    const BVH_Dir = buildBVH(dir_circles, dir_segments, 8); // CHANGE LATER
     this.bvhDirGeomsBuffer?.destroy();
     this.bvhDirGeomsBuffer = device.createBuffer({
       label: "bvh Dir geoms buffer",
@@ -764,7 +772,14 @@ export class Renderer {
     device.queue.writeBuffer(this.bvhDirNodeBuffer, 0, BVH_Dir.nodes);
 
     // NEUMANN
-    const BVH_Neu = buildBVH([], segments, 8); // CHANGE LATER
+    const neu_circles = circles.filter(
+      (circle) => circle.boundary_type === BoundaryType.NEUMANN
+    );
+    const neu_segments = segments.filter(
+      (segment) => segment.boundary_type === BoundaryType.NEUMANN
+    );
+
+    const BVH_Neu = buildBVH(neu_circles, neu_segments, 8); // CHANGE LATER
     this.bvhNeuGeomsBuffer?.destroy();
     this.bvhNeuGeomsBuffer = device.createBuffer({
       label: "bvh Neu geoms buffer",

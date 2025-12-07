@@ -21,6 +21,10 @@ import {
 } from "kicadts";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import TextField from "@mui/material/TextField";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
 
 function downloadFile(content: string, fileName: string, contentType: string) {
   const a = document.createElement("a");
@@ -680,13 +684,17 @@ export default function WosCanvas({
               right: 32,
               top: 270,
               backgroundColor: "white",
-              padding: "8px",
+              padding: "16px",
               borderRadius: "4px",
               boxShadow:
                 "0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14), 0px 1px 10px 0px rgba(0,0,0,0.12)",
               fontFamily: "Roboto, Helvetica, Arial, sans-serif",
               fontSize: "0.95rem",
               color: "black",
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+              minWidth: "200px",
             }}
           >
             {selectedPad && (
@@ -703,6 +711,46 @@ export default function WosCanvas({
                 Width: {selectedSegment.width?.toFixed(3) ?? "N/A"}
               </div>
             )}
+
+            <FormControl fullWidth size="small">
+              <InputLabel id="boundary-type-label">Boundary Type</InputLabel>
+              <Select
+                labelId="boundary-type-label"
+                value={
+                  selectedPad?.boundaryType ??
+                  selectedSegment?.boundaryType ??
+                  BoundaryType.DIRICHILET
+                }
+                label="Boundary Type"
+                onChange={(e) => {
+                  const newVal = e.target.value as BoundaryType;
+                  if (selectedPad) selectedPad.boundaryType = newVal;
+                  if (selectedSegment) selectedSegment.boundaryType = newVal;
+                  setReactDummyVariable((prev) => prev + 1);
+                }}
+              >
+                <MenuItem value={BoundaryType.DIRICHILET}>Dirichlet</MenuItem>
+                <MenuItem value={BoundaryType.NEUMANN}>Neumann</MenuItem>
+              </Select>
+            </FormControl>
+
+            <TextField
+              label="Boundary Value"
+              type="number"
+              size="small"
+              fullWidth
+              value={
+                selectedPad?.boundaryValue ??
+                selectedSegment?.boundaryValue ??
+                0
+              }
+              onChange={(e) => {
+                const newVal = parseFloat(e.target.value);
+                if (selectedPad) selectedPad.boundaryValue = newVal;
+                if (selectedSegment) selectedSegment.boundaryValue = newVal;
+                setReactDummyVariable((prev) => prev + 1);
+              }}
+            />
           </div>
         )}
       </div>
