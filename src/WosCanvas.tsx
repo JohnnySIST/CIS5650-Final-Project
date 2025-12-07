@@ -57,7 +57,7 @@ export default function WosCanvas({
       : [1920, 1080]
   ); // integers, pixels
   const [simTL, setSimTL] = useState<[number, number]>([120, 90]); // floats, world space
-  const [simSize, setSimSize] = useState<[number, number]>([60, 60]); // floats, world space
+  const [simSize, setSimSize] = useState<[number, number]>([52, 45]); // floats, world space
 
   // const [viewRes, setViewRes] = useState<[number, number]>([
   //   webgpuCanvasRef.current ? webgpuCanvasRef.current.width : 1920,
@@ -664,7 +664,7 @@ export default function WosCanvas({
             }
           }}
           onWheel={(e) => {
-            e.preventDefault();
+            //e.preventDefault();
 
             const worldPosBeforeZoom = getMouseWorldPosition(e.nativeEvent);
 

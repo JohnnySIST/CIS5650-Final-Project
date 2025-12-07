@@ -71,6 +71,138 @@ function computeBBox(
   return [minX, minY, maxX, maxY];
 }
 
+// OLD BVH CREATION
+// function subdivide(
+//   geoms: Geom[],
+//   centroids: [number, number][],
+//   circles: Circle[],
+//   segments: Segment[],
+//   leafSize: number
+// ): BVHTreeNode {
+//   const [minX, minY, maxX, maxY] = computeBBox(geoms, circles, segments);
+
+//   if (geoms.length <= leafSize) {
+//     return {
+//       node: {
+//         bbox_min: [minX, minY],
+//         bbox_max: [maxX, maxY],
+//         is_leaf: true,
+//         geom_start: -1,
+//         geom_count: geoms.length,
+//         left_child: -1,
+//         right_child: -1,
+//       },
+//       geoms: geoms,
+//     };
+//   }
+
+//   const extentX = maxX - minX;
+//   const extentY = maxY - minY;
+
+//   var splitAxis: 0 | 1 = 1;
+//   if (extentX > extentY) {
+//     splitAxis = 0;
+//   }
+
+//   var mid: number;
+//   if (splitAxis == 0) {
+//     mid = (maxX - minX) * 0.5 + minX;
+//   } else {
+//     mid = (maxY - minY) * 0.5 + minY;
+//   }
+
+//   var leftGeoms: Geom[] = [];
+//   var rightGeoms: Geom[] = [];
+
+//   geoms.forEach((geo) => {
+//     var center: [number, number];
+//     if (geo.type == 0) {
+//       center = centroids[geo.index];
+//     } else {
+//       center = centroids[geo.index + circles.length];
+//     }
+
+//     if (center[splitAxis] < mid) {
+//       leftGeoms.push(geo);
+//     } else {
+//       rightGeoms.push(geo);
+//     }
+//   });
+
+//   if (leftGeoms.length === 0 || rightGeoms.length === 0) {
+//     leftGeoms = [];
+//     rightGeoms = [];
+
+//     splitAxis = (splitAxis + 1) % 2;
+//     if (splitAxis == 0) {
+//       mid = (maxX - minX) * 0.5 + minX;
+//     } else {
+//       mid = (maxY - minY) * 0.5 + minY;
+//     }
+
+//     geoms.forEach((geo) => {
+//       var center: [number, number];
+//       if (geo.type == 0) {
+//         center = centroids[geo.index];
+//       } else {
+//         center = centroids[geo.index + circles.length];
+//       }
+
+//       if (center[splitAxis] < mid) {
+//         leftGeoms.push(geo);
+//       } else {
+//         rightGeoms.push(geo);
+//       }
+//     });
+//   }
+
+
+//   if (leftGeoms.length === 0 || rightGeoms.length === 0) {
+//     return {
+//       node: {
+//         bbox_min: [minX, minY],
+//         bbox_max: [maxX, maxY],
+//         is_leaf: true,
+//         geom_start: -1,
+//         geom_count: geoms.length,
+//         left_child: -1,
+//         right_child: -1,
+//       },
+//       geoms: geoms,
+//     };
+//   }
+
+//   const leftChild = subdivide(
+//     leftGeoms,
+//     centroids,
+//     circles,
+//     segments,
+//     leafSize
+//   );
+//   const rightChild = subdivide(
+//     rightGeoms,
+//     centroids,
+//     circles,
+//     segments,
+//     leafSize
+//   );
+
+//   return {
+//     node: {
+//       bbox_min: [minX, minY],
+//       bbox_max: [maxX, maxY],
+//       is_leaf: false,
+//       geom_start: -1,
+//       geom_count: -1,
+//       left_child: -1,
+//       right_child: -1,
+//     },
+//     geoms: [],
+//     left: leftChild,
+//     right: rightChild,
+//   };
+// }
+
 function subdivide(
   geoms: Geom[],
   centroids: [number, number][],
@@ -97,93 +229,22 @@ function subdivide(
 
   const extentX = maxX - minX;
   const extentY = maxY - minY;
+  const splitAxis = extentX > extentY ? 0 : 1;
 
-  var splitAxis: 0 | 1 = 1;
-  if (extentX > extentY) {
-    splitAxis = 0;
-  }
-
-  var mid: number;
-  if (splitAxis == 0) {
-    mid = (maxX - minX) * 0.5 + minX;
-  } else {
-    mid = (maxY - minY) * 0.5 + minY;
-  }
-
-  var leftGeoms: Geom[] = [];
-  var rightGeoms: Geom[] = [];
-
-  geoms.forEach((geo) => {
-    var center: [number, number];
-    if (geo.type == 0) {
-      center = centroids[geo.index];
-    } else {
-      center = centroids[geo.index + circles.length];
-    }
-
-    if (center[splitAxis] < mid) {
-      leftGeoms.push(geo);
-    } else {
-      rightGeoms.push(geo);
-    }
+  // PARTITION ABOUNT SPLIT AXIS
+  const sorted = geoms.slice().sort((a, b) => {
+    const centA = getCentroid(a, centroids, circles.length);
+    const centB = getCentroid(b, centroids, circles.length);
+    return centA[splitAxis] - centB[splitAxis];
   });
 
-  if (leftGeoms.length === 0 || rightGeoms.length === 0) {
-    leftGeoms = [];
-    rightGeoms = [];
+  const midIdx = Math.floor(sorted.length / 2);
+  const leftGeoms = sorted.slice(0, midIdx);
+  const rightGeoms = sorted.slice(midIdx);
 
-    splitAxis = (splitAxis + 1) % 2;
-    if (splitAxis == 0) {
-      mid = (maxX - minX) * 0.5 + minX;
-    } else {
-      mid = (maxY - minY) * 0.5 + minY;
-    }
-
-    geoms.forEach((geo) => {
-      var center: [number, number];
-      if (geo.type == 0) {
-        center = centroids[geo.index];
-      } else {
-        center = centroids[geo.index + circles.length];
-      }
-
-      if (center[splitAxis] < mid) {
-        leftGeoms.push(geo);
-      } else {
-        rightGeoms.push(geo);
-      }
-    });
-  }
-
-  if (leftGeoms.length === 0 || rightGeoms.length === 0) {
-    return {
-      node: {
-        bbox_min: [minX, minY],
-        bbox_max: [maxX, maxY],
-        is_leaf: true,
-        geom_start: -1,
-        geom_count: geoms.length,
-        left_child: -1,
-        right_child: -1,
-      },
-      geoms: geoms,
-    };
-  }
-
-  const leftChild = subdivide(
-    leftGeoms,
-    centroids,
-    circles,
-    segments,
-    leafSize
-  );
-  const rightChild = subdivide(
-    rightGeoms,
-    centroids,
-    circles,
-    segments,
-    leafSize
-  );
+  // RECURSE ON CHILDREN
+  const leftChild = subdivide(leftGeoms, centroids, circles, segments, leafSize);
+  const rightChild = subdivide(rightGeoms, centroids, circles, segments, leafSize);
 
   return {
     node: {
@@ -199,6 +260,18 @@ function subdivide(
     left: leftChild,
     right: rightChild,
   };
+}
+
+function getCentroid(
+  geo: Geom,
+  centroids: [number, number][],
+  numCircles: number
+): [number, number] {
+  if (geo.type === 0) {
+    return centroids[geo.index];
+  } else {
+    return centroids[geo.index + numCircles];
+  }
 }
 
 function bvhTreeGPU(
@@ -227,6 +300,39 @@ function bvhTreeGPU(
 
   return myIndex;
 }
+
+// USED FOR DEBUGGING BVH
+// function printBVHStats(root: BVHTreeNode, depth: number = 0): void {
+//   const leafSizes: number[] = [];
+//   const depths: number[] = [];
+  
+//   function traverse(node: BVHTreeNode, d: number): void {
+//     if (node.node.is_leaf) {
+//       leafSizes.push(node.geoms.length);
+//       depths.push(d);
+//     } else {
+//       if (node.left) traverse(node.left, d + 1);
+//       if (node.right) traverse(node.right, d + 1);
+//     }
+//   }
+  
+//   traverse(root, 0);
+  
+//   const totalLeaves = leafSizes.length;
+//   const totalGeoms = leafSizes.reduce((a, b) => a + b, 0);
+//   const minLeaf = Math.min(...leafSizes);
+//   const maxLeaf = Math.max(...leafSizes);
+//   const avgLeaf = totalGeoms / totalLeaves;
+//   const maxDepth = Math.max(...depths);
+//   const avgDepth = depths.reduce((a, b) => a + b, 0) / depths.length;
+  
+//   console.log("=== BVH Stats ===");
+//   console.log(`Total leaves: ${totalLeaves}`);
+//   console.log(`Total geometry: ${totalGeoms}`);
+//   console.log(`Leaf sizes: min=${minLeaf}, max=${maxLeaf}, avg=${avgLeaf.toFixed(2)}`);
+//   console.log(`Depth: max=${maxDepth}, avg=${avgDepth.toFixed(2)}`);
+  
+// }
 
 export function buildBVH(
   circles: Circle[],
@@ -376,6 +482,7 @@ export class Renderer {
   private lastFpsTime: number;
   private frameCount: number = 0;
   private simulationEnabled: boolean = true;
+  private uvPreprocessNeeded: boolean = true;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -620,7 +727,7 @@ export class Renderer {
 
     // BVH BUFFERS
     // DIRICHILET
-    const BVH_Dir = buildBVH(circles, [], 16); // CHANGE LATER
+    const BVH_Dir = buildBVH(circles, [], 8); // CHANGE LATER
     this.bvhDirGeomsBuffer?.destroy();
     this.bvhDirGeomsBuffer = device.createBuffer({
       label: "bvh Dir geoms buffer",
@@ -641,7 +748,7 @@ export class Renderer {
     device.queue.writeBuffer(this.bvhDirNodeBuffer, 0, BVH_Dir.nodes);
 
     // NEUMANN
-    const BVH_Neu = buildBVH([], segments, 16); // CHANGE LATER
+    const BVH_Neu = buildBVH([], segments, 8); // CHANGE LATER
     this.bvhNeuGeomsBuffer?.destroy();
     this.bvhNeuGeomsBuffer = device.createBuffer({
       label: "bvh Neu geoms buffer",
@@ -954,7 +1061,6 @@ export class Renderer {
 
   updateGeometry(circles: Circle[], segments: Segment[]) {
     this.simUpdateId += 1; // prevent renders during this time
-
     this.minMaxBvals = [Number.MAX_VALUE, Number.MIN_VALUE];
 
     // geom buffers
@@ -970,8 +1076,7 @@ export class Renderer {
     // bvh
     this.createBVHBuffers(circles, segments);
 
-    // recreate bind groups
-
+    // recreate bind group
     this.createUVPrePipelineBindGroups();
     this.createWOSPipelineBindGroups();
     this.createWOSRenderBindGroups();
@@ -990,6 +1095,7 @@ export class Renderer {
       0,
       new Float32Array(this.wosValuesBuffer.size / 4).fill(0)
     );
+    this.uvPreprocessNeeded = true;
     requestAnimationFrame(() => this.frame(this.simUpdateId));
   }
 
@@ -1014,17 +1120,21 @@ export class Renderer {
 
     const commandEncoder = device.createCommandEncoder();
     if (this.simulationEnabled) {
-      const uvPreComputePass = commandEncoder.beginComputePass();
-      uvPreComputePass.setPipeline(this.uvPre_Pipeline);
-      uvPreComputePass.setBindGroup(0, this.domainSizeBindGroup_uvPre);
-      uvPreComputePass.setBindGroup(1, this.uvBindGroup_uvPre);
-      uvPreComputePass.setBindGroup(2, this.bvhBindGroup_uvPre);
+      if (this.uvPreprocessNeeded) {
+        console.log("UV PRE RAN");
+        const uvPreComputePass = commandEncoder.beginComputePass();
+        uvPreComputePass.setPipeline(this.uvPre_Pipeline);
+        uvPreComputePass.setBindGroup(0, this.domainSizeBindGroup_uvPre);
+        uvPreComputePass.setBindGroup(1, this.uvBindGroup_uvPre);
+        uvPreComputePass.setBindGroup(2, this.bvhBindGroup_uvPre);
 
-      const wgSize_Pre = 8;
-      const dispatchX_Pre = Math.ceil(this.simRes[0] / wgSize_Pre);
-      const dispatchY_Pre = Math.ceil(this.simRes[1] / wgSize_Pre);
-      uvPreComputePass.dispatchWorkgroups(dispatchX_Pre, dispatchY_Pre);
-      uvPreComputePass.end();
+        const wgSize_Pre = 8;
+        const dispatchX_Pre = Math.ceil(this.simRes[0] / wgSize_Pre);
+        const dispatchY_Pre = Math.ceil(this.simRes[1] / wgSize_Pre);
+        uvPreComputePass.dispatchWorkgroups(dispatchX_Pre, dispatchY_Pre);
+        uvPreComputePass.end();
+        this.uvPreprocessNeeded = false;
+      }
 
       this.totalWalks += 1; // IF YOU UPDATE THIS, UPDATE NUMBER IN wosCompute AND wosRender
 
