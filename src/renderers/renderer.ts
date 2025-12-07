@@ -4,19 +4,7 @@ import wosRender from "/src/shaders/wosRender.wgsl?raw";
 
 import { example_circles, example_segments } from "./example_data";
 import { align } from "../utils/util";
-
-export interface Circle {
-  center: [number, number];
-  radius: number;
-  boundary_value: number;
-}
-
-export interface Segment {
-  start: [number, number];
-  end: [number, number];
-  widthRadius: number;
-  boundary_value: number;
-}
+import { BoundaryType, Circle, Segment } from "./renderTypes";
 
 interface Geom {
   type: number; // 0 indicates circle, 1 indicates segment
@@ -429,7 +417,64 @@ export class Renderer {
       format: this.format,
     });
 
-    this.setCircles();
+    this.simUpdateId += 1;
+
+    const circles = example_circles;
+    const segments = example_segments;
+
+    // =============================
+    // SETUP A BVH BUFFERS HERE
+    // =============================
+
+    this.createCircleBuffer(circles);
+    this.createSegmentBuffer(segments);
+    this.createBVHBuffers(circles, segments);
+
+    // =============================
+    //    Uniform buffers
+    // =============================
+
+    this.createSimPropertiesBuffers();
+    this.createBoardPropertiesBuffers();
+
+    this.createViewProperitiesBuffers();
+    this.createMinMaxBValsBuffer();
+
+    // UV BUFFERS
+
+    this.createUVBuffer();
+
+    // WOS BUFFERS
+
+    this.createWalkCountBuffer();
+    this.createWOSValuesBuffer();
+
+    // =============================
+    //    UV PREPROCESS SETUP
+    // =============================
+
+    this.createUVPrePipeline();
+    this.createUVPrePipelineBindGroups();
+
+    // ===============================
+    //    WOS COMPUTE SHADER SETUP
+    // ===============================
+
+    this.createWOSPipeline();
+    this.createWOSPipelineBindGroups();
+
+    // ======================================
+    //    OUTPUT VERT / FRAG FOR RENDERING
+    // ======================================
+
+    this.createWOSRenderPipeline();
+    this.createWOSRenderBindGroups();
+
+    // ===============================
+    //    THIS RENDERS STUFF :)
+    // ===============================
+    this.totalWalks = 0;
+    requestAnimationFrame(() => this.frame(this.simUpdateId));
   }
 
   updateParams({
@@ -530,7 +575,6 @@ export class Renderer {
     }
 
     this.circleGeomBuffer?.destroy();
-
     this.circleGeomBuffer = this.device.createBuffer({
       label: "circle geo buffer",
       size: circles.length * 4 * 4,
@@ -904,63 +948,37 @@ export class Renderer {
     });
   }
 
-  setCircles(
-    circles: Circle[] = example_circles,
-    segments: Segment[] = example_segments
-  ) {
-    this.simUpdateId += 1;
+  updateGeometry(circles: Circle[], segments: Segment[]) {
+    this.simUpdateId += 1; // prevent renders during this time
 
+    this.minMaxBvals = [Number.MAX_VALUE, Number.MIN_VALUE];
+
+    // geom buffers
     this.createCircleBuffer(circles);
     this.createSegmentBuffer(segments);
 
-    // =============================
-    // SETUP A BVH BUFFERS HERE
-    // =============================
+    this.device.queue.writeBuffer(
+      this.minMaxBValsBuffer,
+      0,
+      new Float32Array(this.minMaxBvals)
+    );
 
+    // bvh
     this.createBVHBuffers(circles, segments);
 
-    // =============================
-    //    UV PREPROCESS SETUP
-    // =============================
-
-    this.createUVPrePipeline();
-
-    this.createSimPropertiesBuffers();
-
-    this.createBoardPropertiesBuffers();
-
-    // BIND GEOMETRY DATA
-    this.createUVBuffer();
+    // recreate bind groups
 
     this.createUVPrePipelineBindGroups();
-
-    // ===============================
-    //    WOS COMPUTE SHADER SETUP
-    // ===============================
-    this.createWOSPipeline();
-
-    this.createWalkCountBuffer();
-    this.createWOSValuesBuffer();
     this.createWOSPipelineBindGroups();
-
-    // ======================================
-    //    OUTPUT VERT / FRAG FOR RENDERING
-    // ======================================
-    this.createWOSRenderPipeline();
-
-    this.createViewProperitiesBuffers();
-    this.createMinMaxBValsBuffer();
     this.createWOSRenderBindGroups();
 
-    // ===============================
-    //    THIS RENDERS STUFF :)
-    // ===============================
-    this.totalWalks = 0;
-    requestAnimationFrame(() => this.frame(this.simUpdateId));
+    this.resetSim(false);
   }
 
-  resetSim() {
-    this.simUpdateId++;
+  resetSim(updateSimId: boolean = true) {
+    if (updateSimId) {
+      this.simUpdateId++;
+    }
     this.simulationEnabled = true;
     this.totalWalks = 0;
     this.device.queue.writeBuffer(

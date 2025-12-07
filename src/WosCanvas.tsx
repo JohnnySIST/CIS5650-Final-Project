@@ -4,11 +4,12 @@ import { assert, makeRegexFromWildcardString } from "./utils/util";
 import TraceWidthSlider from "./ui/TraceWidthSlider";
 
 import {
+  BoundaryType,
   Circle as RenderCircle,
-  Renderer,
   Segment as RenderSegment,
-} from "./renderers/renderer";
+} from "./renderers/renderTypes";
 import "./style.css";
+import { Renderer } from "./renderers/renderer";
 
 import { parseKicadPcb, KicadPcb, FootprintPad, Segment } from "kicadts";
 
@@ -359,6 +360,7 @@ export default function WosCanvas({
       center: [pad.x, pad.y],
       radius: pad.radius,
       boundary_value: Math.random(),
+      boundary_type: BoundaryType.DIRICHILET,
     };
   });
 
@@ -375,12 +377,14 @@ export default function WosCanvas({
       end: [segment.endPoint?.x || 0, segment.endPoint?.y || 0],
       widthRadius: (segment.width || 0) / 2,
       boundary_value: Math.random(),
+      boundary_type: BoundaryType.NEUMANN,
     };
   });
 
   async function refreshSimulation() {
     console.log("Possibly refreshing simulation");
     if (!renderer || !pcbDesign) {
+      console.log("sike not refreshing: ");
       console.log("Renderer", renderer);
       console.log("PCB Design", pcbDesign);
       return;
@@ -389,7 +393,7 @@ export default function WosCanvas({
     console.log("Found pads:", drawAbleFootprintPads);
     console.log("Found segments:", drawAbleSegments);
 
-    renderer.setCircles(renderCircles, renderSegments);
+    renderer.updateGeometry(renderCircles, renderSegments);
   }
 
   useEffect(() => {
@@ -712,7 +716,10 @@ export default function WosCanvas({
                 uvMove.v
               );
 
-              setViewTL([viewTL[0] - worldMove.x, viewTL[1] - worldMove.y]);
+              setViewTL((prevViewTL) => [
+                prevViewTL[0] - worldMove.x,
+                prevViewTL[1] - worldMove.y,
+              ]);
             }
             if (isSelecting) {
               const newSelectionEnd = getMouseWorldPosition(e.nativeEvent);
