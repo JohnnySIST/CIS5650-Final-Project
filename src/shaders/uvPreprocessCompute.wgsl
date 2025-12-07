@@ -277,7 +277,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 
     let dist = distanceToBoundary(worldPos);
 
-    if dist < 0.0 {
+    if (dist < 0.0) {
         uv = vec2f(-1.0, -1.0);
     }
     uv_list[index] = uv;

@@ -86,89 +86,6 @@ fn distanceToAABB(point: vec2f, bbox_min: vec2f, bbox_max: vec2f) -> f32 {
     return sqrt(dx * dx + dy * dy);
 }
 
-// fn queryBVH(pos: vec2f) -> vec2f {
-//     var stack_ptr: i32 = 0;
-//     var stack: array<u32, 32>;
-//     stack[0] = 0u;
-
-//     var closest_dist = 1e10;
-//     var closest_boundary_value = 0.0;
-
-//     var iterations = 0u;
-
-//     while stack_ptr >= 0 {
-//         iterations += 1u;
-//         if iterations > 200u { break; } // Safety
-
-//         let node_idx = stack[u32(stack_ptr)];
-//         stack_ptr -= 1;
-
-//         if node_idx >= arrayLength(&bvhNodes) { continue; }
-
-//         let node = bvhNodes[node_idx];
-    
-//     // PRUNE FAR SUBTREES
-//         let bbox_dist = distanceToAABB(pos, node.bbox_min, node.bbox_max);
-//         if bbox_dist > abs(closest_dist) {
-//       continue;
-//         }
-
-//         if node.is_leaf == 1u {
-//       // TEST FOR LEAF
-//             for (var i = 0u; i < node.geom_count; i++) {
-//                 let geom_idx = node.geom_start + i;
-//                 if geom_idx >= arrayLength(&bvhGeo) { break; }
-
-//                 let geom = bvhGeo[geom_idx];
-
-//                 var dist: f32;
-//                 var bVal: f32;
-
-//                 if geom.geoType == 0u {
-//                     if geom.index >= arrayLength(&circles) { continue; }
-//                     let circle = circles[geom.index];
-//                     dist = length(pos - circle.center) - circle.radius;
-//                     bVal = circle.boundary_value;
-//                 } else {
-//                     if geom.index >= arrayLength(&segments) { continue; }
-//                     let segment = segments[geom.index];
-//                     dist = distanceToSegment(pos, segment);
-//                     bVal = segment.boundary_value;
-//                 }
-        
-//         // UPDATE CLOSEST POINT
-//                 if abs(dist) < abs(closest_dist) {
-//                     closest_dist = dist;
-//                     closest_boundary_value = bVal;
-//                 }
-//             }
-//         } else {
-//         // RECURSE ON CHILDREN
-//             if node.left_child != 0xFFFFFFFFu && node.left_child < arrayLength(&bvhNodes) && stack_ptr < 30 {
-//                 let left_node = bvhNodes[node.left_child];
-//                 let left_bbox_dist = distanceToAABB(pos, left_node.bbox_min, left_node.bbox_max);
-
-//                 if left_bbox_dist <= abs(closest_dist) {
-//                     stack_ptr += 1;
-//                     stack[u32(stack_ptr)] = node.left_child;
-//                 }
-//             }
-
-//             if node.right_child != 0xFFFFFFFFu && node.right_child < arrayLength(&bvhNodes) && stack_ptr < 30 {
-//                 let right_node = bvhNodes[node.right_child];
-//                 let right_bbox_dist = distanceToAABB(pos, right_node.bbox_min, right_node.bbox_max);
-
-//                 if right_bbox_dist <= abs(closest_dist) {
-//                     stack_ptr += 1;
-//                     stack[u32(stack_ptr)] = node.right_child;
-//                 }
-//             }
-//         }
-//     }
-
-//     return vec2f(closest_dist, closest_boundary_value);
-// }
-
 // QUERY DIRICHILET BVH
 fn queryBVHDir(pos: vec2f) -> vec2f {
     var stack_ptr: i32 = 0;
@@ -177,74 +94,65 @@ fn queryBVHDir(pos: vec2f) -> vec2f {
 
     var closest_dist = 1e10;
     var closest_boundary_value = 0.0;
-
-    var iterations = 0u;
-
     while stack_ptr >= 0 {
-        iterations += 1u;
-        if iterations > 200u { break; }
-
         let node_idx = stack[u32(stack_ptr)];
         stack_ptr -= 1;
 
-        if node_idx >= arrayLength(&bvhDirNodes) { continue; }
-
         let node = bvhDirNodes[node_idx];
-    
-    // PRUNE FAR SUBTREES
-        let bbox_dist = distanceToAABB(pos, node.bbox_min, node.bbox_max);
-        if bbox_dist > abs(closest_dist) {
-      continue;
-        }
 
         if node.is_leaf == 1u {
-      // TEST FOR LEAF
+        // TEST FOR LEAF
             for (var i = 0u; i < node.geom_count; i++) {
                 let geom_idx = node.geom_start + i;
-                if geom_idx >= arrayLength(&bvhDirGeo) { break; }
-
                 let geom = bvhDirGeo[geom_idx];
 
                 var dist: f32;
                 var bVal: f32;
 
                 if geom.geoType == 0u {
-                    if geom.index >= arrayLength(&circles) { continue; }
                     let circle = circles[geom.index];
                     dist = length(pos - circle.center) - circle.radius;
                     bVal = circle.boundary_value;
                 } else {
-                    if geom.index >= arrayLength(&segments) { continue; }
                     let segment = segments[geom.index];
                     dist = distanceToSegment(pos, segment);
                     bVal = segment.boundary_value;
                 }
         
-        // UPDATE CLOSEST POINT
+                // UPDATE CLOSEST POINT
                 if dist < closest_dist {
                     closest_dist = dist;
                     closest_boundary_value = bVal;
                 }
             }
         } else {
-        // RECURSE ON CHILDREN
-            if node.left_child != 0xFFFFFFFFu && node.left_child < arrayLength(&bvhDirNodes) && stack_ptr < 30 {
-                let left_node = bvhDirNodes[node.left_child];
-                let left_bbox_dist = distanceToAABB(pos, left_node.bbox_min, left_node.bbox_max);
+            // RECURSE ON CHILDREN
+            let leftChildIdx = node.left_child;
+            let rightChildIdx = node.right_child;
+            let leftNode = bvhDirNodes[leftChildIdx];
+            let rightNode = bvhDirNodes[rightChildIdx];
+            
+            let leftDist = distanceToAABB(pos, leftNode.bbox_min, leftNode.bbox_max);
+            let rightDist = distanceToAABB(pos, rightNode.bbox_min, rightNode.bbox_max);
+            let cutoff = abs(closest_dist);
 
-                if left_bbox_dist <= abs(closest_dist) {
+            if leftDist < rightDist {
+                if rightDist < cutoff && stack_ptr < 30 {
                     stack_ptr += 1;
-                    stack[u32(stack_ptr)] = node.left_child;
+                    stack[stack_ptr] = rightChildIdx;
                 }
-            }
-
-            if node.right_child != 0xFFFFFFFFu && node.right_child < arrayLength(&bvhDirNodes) && stack_ptr < 30 {
-                let right_node = bvhDirNodes[node.right_child];
-                let right_bbox_dist = distanceToAABB(pos, right_node.bbox_min, right_node.bbox_max);
-
-                if right_bbox_dist <= abs(closest_dist) {
+                if leftDist < cutoff && stack_ptr < 30 {
                     stack_ptr += 1;
-                    stack[u32(stack_ptr)] = node.right_child;
+                    stack[stack_ptr] = leftChildIdx;
+                }
+            } else {
+                if leftDist < cutoff && stack_ptr < 30 {
+                    stack_ptr += 1;
+                    stack[stack_ptr] = leftChildIdx;
+                }
+                if rightDist < cutoff && stack_ptr < 30 {
+                    stack_ptr += 1;
+                    stack[stack_ptr] = rightChildIdx;
                 }
             }
         }
@@ -291,7 +199,13 @@ fn distanceToBoundaryWoS(pos: vec2f) -> vec2f {
         min(pos.y - boardTL.y, boardBR.y - pos.y)
     );
 
-    var result = queryBVHDir(pos);//naiveClosestPoint(pos);//
+    var resultDir = queryBVHDir(pos);//naiveClosestPoint(pos);//
+    var resultNeu = queryBVHNeu(pos);
+    var result = resultDir;
+    if (resultDir[0] > resultNeu.dist) {
+        result[0] = resultNeu.dist;
+        result[1] = resultNeu.flux;
+    }
     if boxDist < result[0] {
         result[0] = boxDist;
         result[1] = 0.0;
@@ -321,33 +235,6 @@ fn walkOnSpheres(startPos: vec2f, rngState: ptr<function, u32>) -> f32 {
     }
 
     return temp;
-}
-
-fn dTBDirichlet(pos: vec2f) -> vec2f {
-    var circleDistFinal = length(pos - circles[0].center) - circles[0].radius;
-    var circlebValFinal = circles[0].boundary_value;
-    for (var i = 1u; i < arrayLength(&circles); i++) {
-        let curDist = length(pos - circles[i].center) - circles[i].radius;
-        if curDist < circleDistFinal {
-            circleDistFinal = curDist;
-            circlebValFinal = circles[i].boundary_value;
-        }
-    }
-    // var segmentDistFinal = distanceToSegment(pos, segments[0]);
-    // var segmentbValFinal = segments[0].boundary_value;
-    // for (var i = 1u; i < arrayLength(&segments); i++) {
-    //     let curDist = distanceToSegment(pos, segments[i]);
-    //     if curDist < segmentDistFinal {
-    //         segmentDistFinal = curDist;
-    //         segmentbValFinal = segments[i].boundary_value;
-    //     }
-    // }
-    var result = vec2f(circleDistFinal, circlebValFinal);
-    // if (segmentDistFinal < circleDistFinal) {
-    //     result = vec2f(segmentDistFinal, segmentbValFinal);
-    // }
-
-    return result;
 }
 
 fn disttanceToCircleNeumann(worldPos: vec2f, circle: Circle) -> NeumannHit {
@@ -400,31 +287,16 @@ fn queryBVHNeu(pos: vec2f) -> NeumannHit {
     var closest_boundary_value = 0.0;
     var closest_normal = vec2f(0.0);
 
-    var iterations = 0u;
-
     while stack_ptr >= 0 {
-        iterations += 1u;
-        if iterations > 200u { break; }
-
         let node_idx = stack[u32(stack_ptr)];
         stack_ptr -= 1;
 
-        if node_idx >= arrayLength(&bvhNeuNodes) { continue; }
-
         let node = bvhNeuNodes[node_idx];
-    
-    // PRUNE FAR SUBTREES
-        let bbox_dist = distanceToAABB(pos, node.bbox_min, node.bbox_max);
-        if bbox_dist > abs(closest_dist) {
-            continue;
-        }
 
         if node.is_leaf == 1u {
         // TEST FOR LEAF
             for (var i = 0u; i < node.geom_count; i++) {
                 let geom_idx = node.geom_start + i;
-                if geom_idx >= arrayLength(&bvhNeuGeo) { break; }
-
                 let geom = bvhNeuGeo[geom_idx];
 
                 var dist: f32;
@@ -432,14 +304,12 @@ fn queryBVHNeu(pos: vec2f) -> NeumannHit {
                 var bNorm: vec2f;
 
                 if geom.geoType == 0u {
-                    if geom.index >= arrayLength(&circles) { continue; }
                     let circle = circles[geom.index];
                     let hitResult = disttanceToCircleNeumann(pos, circle);
                     dist = hitResult.dist;
                     bVal = hitResult.flux;
                     bNorm = hitResult.normal;
                 } else {
-                    if geom.index >= arrayLength(&segments) { continue; }
                     let segment = segments[geom.index];
                     let hitResult = distanceToSegmentNeumann(pos, segment);
                     dist = hitResult.dist;
@@ -455,24 +325,33 @@ fn queryBVHNeu(pos: vec2f) -> NeumannHit {
                 }
             }
         } else {
-        // RECURSE ON CHILDREN
-            if node.left_child != 0xFFFFFFFFu && node.left_child < arrayLength(&bvhNeuNodes) && stack_ptr < 30 {
-                let left_node = bvhNeuNodes[node.left_child];
-                let left_bbox_dist = distanceToAABB(pos, left_node.bbox_min, left_node.bbox_max);
+         // RECURSE ON CHILDREN
+            let leftChildIdx = node.left_child;
+            let rightChildIdx = node.right_child;
+            let leftNode = bvhNeuNodes[leftChildIdx];
+            let rightNode = bvhNeuNodes[rightChildIdx];
+            
+            let leftDist = distanceToAABB(pos, leftNode.bbox_min, leftNode.bbox_max);
+            let rightDist = distanceToAABB(pos, rightNode.bbox_min, rightNode.bbox_max);
+            let cutoff = abs(closest_dist);
 
-                if left_bbox_dist <= abs(closest_dist) {
+            if leftDist < rightDist {
+                if rightDist < cutoff && stack_ptr < 30 {
                     stack_ptr += 1;
-                    stack[u32(stack_ptr)] = node.left_child;
+                    stack[stack_ptr] = rightChildIdx;
                 }
-            }
-
-            if node.right_child != 0xFFFFFFFFu && node.right_child < arrayLength(&bvhNeuNodes) && stack_ptr < 30 {
-                let right_node = bvhNeuNodes[node.right_child];
-                let right_bbox_dist = distanceToAABB(pos, right_node.bbox_min, right_node.bbox_max);
-
-                if right_bbox_dist <= abs(closest_dist) {
+                if leftDist < cutoff && stack_ptr < 30 {
                     stack_ptr += 1;
-                    stack[u32(stack_ptr)] = node.right_child;
+                    stack[stack_ptr] = leftChildIdx;
+                }
+            } else {
+                if leftDist < cutoff && stack_ptr < 30 {
+                    stack_ptr += 1;
+                    stack[stack_ptr] = leftChildIdx;
+                }
+                if rightDist < cutoff && stack_ptr < 30 {
+                    stack_ptr += 1;
+                    stack[stack_ptr] = rightChildIdx;
                 }
             }
         }
@@ -509,16 +388,10 @@ fn dTBNeumann(pos: vec2f) -> NeumannHit {
         boxNormal = vec2f(y, 0.0);
     }
 
-    var segmentFinal = queryBVHNeu(pos);//distanceToSegmentNeumann(pos, segments[0]);
-    // for (var i = 1u; i < arrayLength(&segments); i++) {
-    //     let curSeg = distanceToSegmentNeumann(pos, segments[i]);
-    //     if curSeg.dist < segmentFinal.dist {
-    //         segmentFinal = curSeg;
-    //     }
-    // }
+    var neumanBoundary = queryBVHNeu(pos);
 
-    if segmentFinal.dist < boxDist {
-        return segmentFinal;
+    if neumanBoundary.dist < boxDist {
+        return neumanBoundary;
     } else {
         return NeumannHit(
             boxDist,
@@ -549,8 +422,8 @@ fn walkOnStars(startPos: vec2f, rngState: ptr<function, u32>) -> f32 {
     var pos = startPos;
     var accumulatedFlux = 0.0;
     let epsilon = 0.08;
-    let rMin = 0.08;
-    let maxSteps = 20;
+    let rMin = 0.2;
+    let maxSteps = 10;
     var onNeumann = false;
     var neumannNorm = vec2f(0.0);
 
@@ -615,7 +488,6 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     let garbo1 = bvhNeuGeo[0];
     let garbo2 = bvhNeuNodes[0];
 
-
     let worldPos = uv * simSize + simTL;
 
     let numWalks = 1u; // UPDATE totalWalks in render.ts if you change this
@@ -623,7 +495,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     var seed = id.x * 747796405u + id.y * 2891336453u * totalWalks;
 
     for (var i = 0u; i < numWalks; i++) {
-        let temp = walkOnSpheres(worldPos, &seed);// walkOnStars(worldPos, &seed);//
+        let temp = walkOnStars(worldPos, &seed);// walkOnSpheres(worldPos, &seed);// 
         totalTemp += temp;
     }
 
