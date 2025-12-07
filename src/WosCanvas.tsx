@@ -671,6 +671,38 @@ export default function WosCanvas({
             720x480
           </MenuItem>
         </Menu>
+        {(selectedPad || selectedSegment) && (
+          <div
+            style={{
+              position: "fixed",
+              right: 32,
+              top: 270,
+              backgroundColor: "white",
+              padding: "8px",
+              borderRadius: "4px",
+              boxShadow:
+                "0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14), 0px 1px 10px 0px rgba(0,0,0,0.12)",
+              fontFamily: "Roboto, Helvetica, Arial, sans-serif",
+              fontSize: "0.95rem",
+              color: "black",
+            }}
+          >
+            {selectedPad && (
+              <div style={{ marginBottom: selectedSegment ? "8px" : "0" }}>
+                <strong>Selected Pad</strong>
+                <br />
+                Width: {selectedPad.size?.width.toFixed(3) ?? "N/A"}
+              </div>
+            )}
+            {selectedSegment && (
+              <div>
+                <strong>Selected Segment</strong>
+                <br />
+                Width: {selectedSegment.width?.toFixed(3) ?? "N/A"}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <div
         style={{
