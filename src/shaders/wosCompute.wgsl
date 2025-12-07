@@ -623,7 +623,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     var seed = id.x * 747796405u + id.y * 2891336453u * totalWalks;
 
     for (var i = 0u; i < numWalks; i++) {
-        let temp = walkOnSpheres(worldPos, &seed);// walkOnStars(worldPos, &seed);//
+        let temp = walkOnStars(worldPos, &seed);// walkOnStars(worldPos, &seed);//
         totalTemp += temp;
     }
 

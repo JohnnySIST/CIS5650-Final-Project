@@ -2,6 +2,7 @@ import Button from "@mui/material/Button";
 import React, { useRef, useEffect, useState, useMemo } from "react";
 import { assert, makeRegexFromWildcardString } from "./utils/util";
 import TraceWidthSlider from "./ui/TraceWidthSlider";
+import { distanceToLineSegment } from "./utils/mathUtils";
 
 import {
   BoundaryType,
@@ -12,6 +13,8 @@ import "./style.css";
 import { Renderer } from "./renderers/renderer";
 
 import { parseKicadPcb, KicadPcb, FootprintPad, Segment } from "kicadts";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 
 function downloadFile(content: string, fileName: string, contentType: string) {
   const a = document.createElement("a");
@@ -448,6 +451,13 @@ export default function WosCanvas({
 
   useEffect(() => {
     renderer?.updateParams({
+      simRes: simRes,
+    });
+    console.log("Updated renderer sim res", simRes);
+  }, [renderer, simRes]);
+
+  useEffect(() => {
+    renderer?.updateParams({
       boardTL: boardTL,
       boardSize: boardSize,
     });
@@ -475,6 +485,17 @@ export default function WosCanvas({
     if (selectedPad || selectedSegment) {
       refreshSimulation();
     }
+  };
+
+  const [resMenuAnchorEl, setResMenuAnchorEl] =
+    React.useState<null | HTMLElement>(null);
+  const resmenuopen = Boolean(resMenuAnchorEl);
+  const handleResMenuClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setResMenuAnchorEl(event.currentTarget);
+  };
+  const handleResMenuClose = (resolution: [number, number]) => {
+    setSimRes([...resolution]);
+    setResMenuAnchorEl(null);
   };
 
   return (
@@ -547,6 +568,44 @@ export default function WosCanvas({
         >
           Export to KiCad
         </Button>
+        <Button
+          id="basic-button"
+          aria-controls={resmenuopen ? "basic-menu" : undefined}
+          aria-haspopup="true"
+          aria-expanded={resmenuopen ? "true" : undefined}
+          variant="contained"
+          color="primary"
+          sx={{
+            position: "fixed",
+            right: 32,
+            top: 220,
+            fontSize: "0.95rem",
+          }}
+          onClick={handleResMenuClick}
+        >
+          Resolution
+        </Button>
+        <Menu
+          id="basic-menu"
+          anchorEl={resMenuAnchorEl}
+          open={resmenuopen}
+          onClose={handleResMenuClose}
+          slotProps={{
+            list: {
+              "aria-labelledby": "basic-button",
+            },
+          }}
+        >
+          <MenuItem onClick={() => handleResMenuClose([1920, 1080])}>
+            1920x1080
+          </MenuItem>
+          <MenuItem onClick={() => handleResMenuClose([1280, 720])}>
+            1280x720
+          </MenuItem>
+          <MenuItem onClick={() => handleResMenuClose([720, 480])}>
+            720x480
+          </MenuItem>
+        </Menu>
       </div>
       <div
         style={{
@@ -633,38 +692,10 @@ export default function WosCanvas({
                       ) {
                         return false;
                       }
-                      const ABX = segment.end.x - segment.start.x;
-                      const ABY = segment.end.y - segment.start.y;
-
-                      const APX = clickPos.x - segment.start.x;
-                      const APY = clickPos.y - segment.start.y;
-
-                      const ABAP = ABX * APX + ABY * APY;
-
-                      const ABAB = ABX * ABX + ABY * ABY;
-
-                      const t = ABAP / ABAB;
-
-                      if (t < 0) {
-                        const dist = Math.sqrt(
-                          (segment.start.x - clickPos.x) ** 2 +
-                            (segment.start.y - clickPos.y) ** 2
-                        );
-                        return dist < segment.width / 2;
-                      }
-                      if (t > 1) {
-                        const dist = Math.sqrt(
-                          (segment.end.x - clickPos.x) ** 2 +
-                            (segment.end.y - clickPos.y) ** 2
-                        );
-                        return dist < segment.width / 2;
-                      }
-
-                      const projX = segment.start.x + t * ABX;
-                      const projY = segment.start.y + t * ABY;
-
-                      const dist = Math.sqrt(
-                        (projX - clickPos.x) ** 2 + (projY - clickPos.y) ** 2
+                      const dist = distanceToLineSegment(
+                        clickPos,
+                        segment.start,
+                        segment.end
                       );
                       return dist < segment.width / 2;
                     }) ?? null

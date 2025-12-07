@@ -522,9 +522,14 @@ export class Renderer {
       device.queue.writeBuffer(this.boardSizeBuffer, 0, boardSizeData);
     }
     if (simRes) {
+      this.simUpdateId += 1;
       this.simRes = simRes;
       const simResData = new Uint32Array(this.simRes);
       device.queue.writeBuffer(this.simResBuffer, 0, simResData);
+      this.createUVBuffer();
+      this.createWOSValuesBuffer();
+      this.createAllBindGroups();
+      this.resetSim(false);
     }
     if (simTL) {
       this.simTL = simTL;
@@ -952,6 +957,12 @@ export class Renderer {
     });
   }
 
+  private createAllBindGroups() {
+    this.createUVPrePipelineBindGroups();
+    this.createWOSPipelineBindGroups();
+    this.createWOSRenderBindGroups();
+  }
+
   updateGeometry(circles: Circle[], segments: Segment[]) {
     this.simUpdateId += 1; // prevent renders during this time
 
@@ -972,9 +983,7 @@ export class Renderer {
 
     // recreate bind groups
 
-    this.createUVPrePipelineBindGroups();
-    this.createWOSPipelineBindGroups();
-    this.createWOSRenderBindGroups();
+    this.createAllBindGroups();
 
     this.resetSim(false);
   }
