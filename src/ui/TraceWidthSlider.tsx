@@ -39,21 +39,30 @@ const TraceWidthSlider: React.FC<TraceWidthSliderProps> = ({
         id="trace-width-input"
         type="number"
         size="small"
-        inputProps={{
-          min,
-          max,
-          style: {
-            textAlign: "center",
-            fontWeight: 700,
-            fontFamily: "Montserrat, Inter, Roboto, Arial, sans-serif",
-            fontSize: "1rem",
-            color: "#fff",
-            padding: "4px 0",
+        slotProps={{
+          htmlInput: {
+            min,
+            max,
+            style: {
+              textAlign: "center",
+              fontWeight: 700,
+              fontFamily: "Montserrat, Inter, Roboto, Arial, sans-serif",
+              fontSize: "1rem",
+              color: "#fff",
+              padding: "4px 0",
+            },
           },
         }}
         value={value}
-        onChange={e => onChange(Number(e.target.value))}
-        sx={{ width: 80, height: 32, background: "none", display: "flex", alignItems: "center", ml: -3 }}
+        onChange={(e) => onChange(Number(e.target.value))}
+        sx={{
+          width: 80,
+          height: 32,
+          background: "none",
+          display: "flex",
+          alignItems: "center",
+          ml: -3,
+        }}
         variant="standard"
       />
     </div>

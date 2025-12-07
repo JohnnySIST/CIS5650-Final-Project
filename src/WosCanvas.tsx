@@ -51,13 +51,68 @@ export default function WosCanvas({
     null
   ); // world space
 
+  const [renderer, setRenderer] = useState<Renderer | null>(null);
+
+  const [pcbDesign, setPcbDesign] = useState<KicadPcb | null>(null);
+
+  const targetPads: FootprintPad[] = [];
+  const targetSegments: Segment[] = [];
+
+  const [selectedPad, setSelectedPad] = useState<FootprintPad | null>(null);
+  const [selectedSegment, setSelectedSegment] = useState<Segment | null>(null);
+  const [targetLayer, setTargetLayer] = useState("B.Cu");
+
+  const edgeCutSegments = useMemo(() => {
+    console.log("edge cut segments updated");
+    return pcbDesign?.graphicLines.filter((line) => {
+      return line.layer?.names.some((layer) => {
+        return makeRegexFromWildcardString(layer).test("Edge.Cuts");
+      });
+    });
+  }, [pcbDesign]);
+
+  const boardTL: [number, number] = useMemo(() => {
+    console.log("boardTL updated");
+    return (
+      edgeCutSegments?.reduce(
+        (acc, line) => {
+          return [
+            Math.min(acc[0], line.startPoint?.x || Number.POSITIVE_INFINITY),
+            Math.min(acc[1], line.startPoint?.y || Number.POSITIVE_INFINITY),
+          ];
+        },
+        [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY]
+      ) ?? [120, 90]
+    );
+  }, [edgeCutSegments]);
+
+  const boardBR: [number, number] = useMemo(() => {
+    console.log("boardBR updated");
+    return (
+      edgeCutSegments?.reduce(
+        (acc, line) => {
+          return [
+            Math.max(acc[0], line.endPoint?.x || Number.NEGATIVE_INFINITY),
+            Math.max(acc[1], line.endPoint?.y || Number.NEGATIVE_INFINITY),
+          ];
+        },
+        [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY]
+      ) ?? [180, 150]
+    );
+  }, [edgeCutSegments]);
+
+  const boardSize: [number, number] = useMemo(() => {
+    console.log("boardSize updated");
+    return [boardBR[0] - boardTL[0], boardBR[1] - boardTL[1]];
+  }, [boardBR, boardTL]);
+
   const [simRes, setSimRes] = useState<[number, number]>(
     webgpuCanvasRef.current
       ? [webgpuCanvasRef.current.width, webgpuCanvasRef.current.height]
       : [1920, 1080]
   ); // integers, pixels
-  const [simTL, setSimTL] = useState<[number, number]>([120, 90]); // floats, world space
-  const [simSize, setSimSize] = useState<[number, number]>([60, 60]); // floats, world space
+  const [simTL, setSimTL] = useState<[number, number]>([...boardTL]); // floats, world space
+  const [simSize, setSimSize] = useState<[number, number]>([...boardSize]); // floats, world space
 
   // const [viewRes, setViewRes] = useState<[number, number]>([
   //   webgpuCanvasRef.current ? webgpuCanvasRef.current.width : 1920,
@@ -69,17 +124,6 @@ export default function WosCanvas({
   ];
   const [viewTL, setViewTL] = useState<[number, number]>(simTL); // floats, world space
   const [viewSize, setViewSize] = useState<[number, number]>(simSize); // floats, world space
-
-  const [renderer, setRenderer] = useState<Renderer | null>(null);
-
-  const [pcbDesign, setPcbDesign] = useState<KicadPcb | null>(null);
-
-  const targetPads: FootprintPad[] = [];
-  const targetSegments: Segment[] = [];
-
-  const [selectedPad, setSelectedPad] = useState<FootprintPad | null>(null);
-  const [selectedSegment, setSelectedSegment] = useState<Segment | null>(null);
-  const [targetLayer, setTargetLayer] = useState("B.Cu");
 
   function getWorldPositionFromCanvasUV(
     canvasU: number,
@@ -291,69 +335,29 @@ export default function WosCanvas({
     })();
   }, [webgpuCanvasRef.current, uiCanvasRef.current]);
 
-  const edgeCutSegments = useMemo(() => {
-    console.log("edge cut segments updated");
-    return pcbDesign?.graphicLines.filter((line) => {
-      return line.layer?.names.some((layer) => {
-        return makeRegexFromWildcardString(layer).test("Edge.Cuts");
-      });
-    });
-  }, [pcbDesign]);
-
-  const boardTL: [number, number] = useMemo(() => {
-    console.log("boardTL updated");
+  const drawAbleFootprintPads = useMemo(() => {
+    console.log("drawAbleFootprintPads updated");
     return (
-      edgeCutSegments?.reduce(
-        (acc, line) => {
-          return [
-            Math.min(acc[0], line.startPoint?.x || Number.POSITIVE_INFINITY),
-            Math.min(acc[1], line.startPoint?.y || Number.POSITIVE_INFINITY),
-          ];
-        },
-        [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY]
-      ) ?? [120, 90]
+      pcbDesign?.footprints.flatMap((footprint) => {
+        return footprint.fpPads
+          .filter((pad) => {
+            return (
+              (pad.shape === "circle" || pad.shape === "oval") &&
+              pad.layers?.layers.some((layer) => {
+                return makeRegexFromWildcardString(layer).test(targetLayer);
+              })
+            );
+          })
+          .map((pad) => {
+            return {
+              x: (footprint.position?.x || 0) + (pad.at?.x || 0), // TODO: Apply rotation
+              y: (footprint.position?.y || 0) + (pad.at?.y || 0),
+              radius: (pad.size?.height || 0) / 2,
+            };
+          });
+      }) ?? []
     );
-  }, [edgeCutSegments]);
-
-  const boardBR: [number, number] = useMemo(() => {
-    console.log("boardBR updated");
-    return (
-      edgeCutSegments?.reduce(
-        (acc, line) => {
-          return [
-            Math.max(acc[0], line.endPoint?.x || Number.NEGATIVE_INFINITY),
-            Math.max(acc[1], line.endPoint?.y || Number.NEGATIVE_INFINITY),
-          ];
-        },
-        [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY]
-      ) ?? [180, 150]
-    );
-  }, [edgeCutSegments]);
-
-  const boardSize: [number, number] = useMemo(() => {
-    console.log("boardSize updated");
-    return [boardBR[0] - boardTL[0], boardBR[1] - boardTL[1]];
-  }, [boardBR, boardTL]);
-
-  const drawAbleFootprintPads =
-    pcbDesign?.footprints.flatMap((footprint) => {
-      return footprint.fpPads
-        .filter((pad) => {
-          return (
-            (pad.shape === "circle" || pad.shape === "oval") &&
-            pad.layers?.layers.some((layer) => {
-              return makeRegexFromWildcardString(layer).test(targetLayer);
-            })
-          );
-        })
-        .map((pad) => {
-          return {
-            x: (footprint.position?.x || 0) + (pad.at?.x || 0), // TODO: Apply rotation
-            y: (footprint.position?.y || 0) + (pad.at?.y || 0),
-            radius: (pad.size?.height || 0) / 2,
-          };
-        });
-    }) ?? [];
+  }, [pcbDesign, targetLayer]);
 
   const renderCircles: RenderCircle[] = drawAbleFootprintPads.map((pad) => {
     return {
@@ -381,7 +385,7 @@ export default function WosCanvas({
     };
   });
 
-  async function refreshSimulation() {
+  function refreshSimulation() {
     console.log("Possibly refreshing simulation");
     if (!renderer || !pcbDesign) {
       console.log("sike not refreshing: ");
@@ -451,6 +455,11 @@ export default function WosCanvas({
   }, [renderer, boardTL, boardSize]);
 
   useEffect(() => {
+    setSimTL(boardTL);
+    setSimSize(boardSize);
+  }, [boardTL, boardSize]);
+
+  useEffect(() => {
     refreshSimulation();
     console.log("Refreshed simulation");
   }, [renderer, pcbDesign]);
@@ -464,8 +473,7 @@ export default function WosCanvas({
       selectedSegment.width = width;
     }
     if (selectedPad || selectedSegment) {
-      setPcbDesign(null);
-      setPcbDesign(pcbDesign);
+      refreshSimulation();
     }
   };
 
@@ -514,6 +522,7 @@ export default function WosCanvas({
               const content = await file.text();
               const pcb = parseKicadPcb(content);
               setPcbDesign(pcb);
+
               console.log("Parsed KiCad PCB file:", pcb);
             }
           }}
@@ -664,8 +673,6 @@ export default function WosCanvas({
             }
           }}
           onWheel={(e) => {
-            e.preventDefault();
-
             const worldPosBeforeZoom = getMouseWorldPosition(e.nativeEvent);
 
             const zoomFactor = 1.1;
