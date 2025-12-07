@@ -440,6 +440,7 @@ export class Renderer {
 
   private lastFpsTime: number;
   private frameCount: number = 0;
+  private simulationEnabled: boolean = true;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -453,6 +454,7 @@ export class Renderer {
     viewRes: [number, number] = [canvas.width, canvas.height],
     viewTL: [number, number] = boardTL,
     viewSize: [number, number] = boardSize,
+    simulationEnabled: boolean = true,
     fpsCallback: (fps: number) => void = () => {}
   ) {
     this.canvas = canvas;
@@ -466,6 +468,7 @@ export class Renderer {
     this.viewRes = viewRes;
     this.viewTL = viewTL;
     this.viewSize = viewSize;
+    this.simulationEnabled = simulationEnabled;
     this.fpsCallback = fpsCallback;
     this.init();
     this.lastFpsTime = performance.now();
@@ -491,6 +494,7 @@ export class Renderer {
     viewRes,
     viewTL,
     viewSize,
+    simulationEnabled,
   }: {
     boardTL?: [number, number];
     boardSize?: [number, number];
@@ -500,6 +504,7 @@ export class Renderer {
     viewRes?: [number, number];
     viewTL?: [number, number];
     viewSize?: [number, number];
+    simulationEnabled?: boolean;
   }) {
     const device = this.device;
     const canvas = this.canvas;
@@ -548,6 +553,9 @@ export class Renderer {
         this.viewSize[1],
       ]);
       device.queue.writeBuffer(this.viewSizeBuffer, 0, viewSizeData);
+    }
+    if (simulationEnabled !== undefined) {
+      this.simulationEnabled = simulationEnabled;
     }
   }
 
@@ -735,7 +743,7 @@ export class Renderer {
         { binding: 0, resource: { buffer: this.bvhDirGeomsBuffer } },
         { binding: 1, resource: { buffer: this.bvhDirNodeBuffer } },
         { binding: 2, resource: { buffer: this.bvhNeuGeomsBuffer } },
-        { binding: 3, resource: { buffer: this.bvhNeuNodeBuffer } }
+        { binding: 3, resource: { buffer: this.bvhNeuNodeBuffer } },
       ],
     });
 
@@ -814,7 +822,7 @@ export class Renderer {
         { binding: 0, resource: { buffer: this.bvhDirGeomsBuffer } },
         { binding: 1, resource: { buffer: this.bvhDirNodeBuffer } },
         { binding: 2, resource: { buffer: this.bvhNeuGeomsBuffer } },
-        { binding: 3, resource: { buffer: this.bvhNeuNodeBuffer } }
+        { binding: 3, resource: { buffer: this.bvhNeuNodeBuffer } },
       ],
     });
 
@@ -933,38 +941,38 @@ export class Renderer {
     const device = this.device;
 
     const commandEncoder = device.createCommandEncoder();
+    if (this.simulationEnabled) {
+      const uvPreComputePass = commandEncoder.beginComputePass();
+      uvPreComputePass.setPipeline(this.uvPre_Pipeline);
+      uvPreComputePass.setBindGroup(0, this.domainSizeBindGroup_uvPre);
+      uvPreComputePass.setBindGroup(1, this.uvBindGroup_uvPre);
+      uvPreComputePass.setBindGroup(2, this.bvhBindGroup_uvPre);
 
-    const uvPreComputePass = commandEncoder.beginComputePass();
-    uvPreComputePass.setPipeline(this.uvPre_Pipeline);
-    uvPreComputePass.setBindGroup(0, this.domainSizeBindGroup_uvPre);
-    uvPreComputePass.setBindGroup(1, this.uvBindGroup_uvPre);
-    uvPreComputePass.setBindGroup(2, this.bvhBindGroup_uvPre);
+      const wgSize_Pre = 8;
+      const dispatchX_Pre = Math.ceil(this.simRes[0] / wgSize_Pre);
+      const dispatchY_Pre = Math.ceil(this.simRes[1] / wgSize_Pre);
+      uvPreComputePass.dispatchWorkgroups(dispatchX_Pre, dispatchY_Pre);
+      uvPreComputePass.end();
 
-    const wgSize_Pre = 8;
-    const dispatchX_Pre = Math.ceil(this.simRes[0] / wgSize_Pre);
-    const dispatchY_Pre = Math.ceil(this.simRes[1] / wgSize_Pre);
-    uvPreComputePass.dispatchWorkgroups(dispatchX_Pre, dispatchY_Pre);
-    uvPreComputePass.end();
+      this.totalWalks += 1; // IF YOU UPDATE THIS, UPDATE NUMBER IN wosCompute AND wosRender
 
-    this.totalWalks += 1; // IF YOU UPDATE THIS, UPDATE NUMBER IN wosCompute AND wosRender
+      device.queue.writeBuffer(
+        this.walkCountBuffer,
+        0,
+        new Uint32Array([this.totalWalks])
+      );
 
-    device.queue.writeBuffer(
-      this.walkCountBuffer,
-      0,
-      new Uint32Array([this.totalWalks])
-    );
-
-    const wosComputePass = commandEncoder.beginComputePass();
-    wosComputePass.setPipeline(this.wos_pipeline);
-    wosComputePass.setBindGroup(0, this.domainSizeBindGroup_wos);
-    wosComputePass.setBindGroup(1, this.uvBindGroup_compute);
-    wosComputePass.setBindGroup(2, this.bvhBindGroup_compute);
-    const wgSize = 8;
-    const dispatchX_wos = Math.ceil(this.simRes[0] / wgSize);
-    const dispatchY_wos = Math.ceil(this.simRes[1] / wgSize);
-    wosComputePass.dispatchWorkgroups(dispatchX_wos, dispatchY_wos);
-    wosComputePass.end();
-
+      const wosComputePass = commandEncoder.beginComputePass();
+      wosComputePass.setPipeline(this.wos_pipeline);
+      wosComputePass.setBindGroup(0, this.domainSizeBindGroup_wos);
+      wosComputePass.setBindGroup(1, this.uvBindGroup_compute);
+      wosComputePass.setBindGroup(2, this.bvhBindGroup_compute);
+      const wgSize = 8;
+      const dispatchX_wos = Math.ceil(this.simRes[0] / wgSize);
+      const dispatchY_wos = Math.ceil(this.simRes[1] / wgSize);
+      wosComputePass.dispatchWorkgroups(dispatchX_wos, dispatchY_wos);
+      wosComputePass.end();
+    }
     const passEncoder = commandEncoder.beginRenderPass({
       colorAttachments: [
         {
