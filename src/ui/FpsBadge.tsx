@@ -16,7 +16,7 @@ const FpsBadge: React.FC<FpsBadgeProps> = ({ fps }) => (
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      width: 80,
+      width: 120,
     }}
   >
     <Chip

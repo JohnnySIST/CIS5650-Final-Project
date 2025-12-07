@@ -37,14 +37,14 @@ const theme = createTheme({
         containedPrimary: {
           backgroundColor: "#1976d2",
           color: "#fff",
-          '&:hover': {
+          "&:hover": {
             backgroundColor: "#2196f3",
           },
         },
         containedInherit: {
           backgroundColor: "#5a6d85",
           color: "#fff",
-          '&:hover': {
+          "&:hover": {
             backgroundColor: "#7a8da5",
           },
         },
@@ -53,7 +53,7 @@ const theme = createTheme({
     MuiTypography: {
       styleOverrides: {
         root: {
-          color: '#bbbbbbff',
+          color: "#bbbbbbff",
         },
       },
     },
@@ -72,7 +72,11 @@ export default function App() {
     <ThemeProvider theme={theme}>
       <WosCanvas fpsCallback={fpsCallback} simulationEnabled={simEnabled} />
       <FpsBadge fps={fps} />
-      <ToggleSwitch labelOn="Sim On" labelOff="Sim Off" onToggle={setSimEnabled} />
+      <ToggleSwitch
+        labelOn="Sim On"
+        labelOff="Sim Off"
+        onToggle={setSimEnabled}
+      />
     </ThemeProvider>
   );
 }
