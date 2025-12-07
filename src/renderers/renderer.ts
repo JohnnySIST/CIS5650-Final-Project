@@ -9,6 +9,7 @@ import { BoundaryType, Circle, Segment } from "./renderTypes";
 interface Geom {
   type: number; // 0 indicates circle, 1 indicates segment
   index: number;
+  globalIndex: number;
 }
 
 interface BVHNode {
@@ -346,8 +347,8 @@ function bvhTreeGPU(
 // }
 
 export function buildBVH(
-  circles: Circle[],
-  segments: Segment[],
+  circles: { circle: Circle; index: number }[],
+  segments: { segment: Segment; index: number }[],
   leafSize: number = 8
 ): BVH {
   const geoms: Geom[] = [];
@@ -357,22 +358,30 @@ export function buildBVH(
     geoms.push({
       type: 0,
       index: i,
+      globalIndex: circle.index,
     });
 
-    centroids.push([circle.center[0], circle.center[1]]);
+    centroids.push([circle.circle.center[0], circle.circle.center[1]]);
   });
 
   segments.forEach((segment, i) => {
     geoms.push({
       type: 1,
       index: i,
+      globalIndex: segment.index,
     });
-    const centerX = (segment.start[0] + segment.end[0]) / 2;
-    const centerY = (segment.start[1] + segment.end[1]) / 2;
+    const centerX = (segment.segment.start[0] + segment.segment.end[0]) / 2;
+    const centerY = (segment.segment.start[1] + segment.segment.end[1]) / 2;
     centroids.push([centerX, centerY]);
   });
 
-  const rootNode = subdivide(geoms, centroids, circles, segments, leafSize);
+  const rootNode = subdivide(
+    geoms,
+    centroids,
+    circles.map((c) => c.circle),
+    segments.map((s) => s.segment),
+    leafSize
+  );
 
   const flatNodes: BVHNode[] = [];
   const flatGeoms: Geom[] = [];
@@ -381,17 +390,17 @@ export function buildBVH(
   const circleData = new Float32Array(circles.length * 4);
   for (let i = 0; i < circles.length; i++) {
     const offset = i * 4;
-    circleData[offset + 0] = circles[i].center[0];
-    circleData[offset + 1] = circles[i].center[1];
-    circleData[offset + 2] = circles[i].radius;
-    circleData[offset + 3] = circles[i].boundary_value;
+    circleData[offset + 0] = circles[i].circle.center[0];
+    circleData[offset + 1] = circles[i].circle.center[1];
+    circleData[offset + 2] = circles[i].circle.radius;
+    circleData[offset + 3] = circles[i].circle.boundary_value;
   }
 
   const geomsData = new Uint32Array(flatGeoms.length * 2);
   for (let i = 0; i < flatGeoms.length; i++) {
     const offset = i * 2;
     geomsData[offset + 0] = flatGeoms[i].type;
-    geomsData[offset + 1] = flatGeoms[i].index;
+    geomsData[offset + 1] = flatGeoms[i].globalIndex;
   }
 
   const nodeData = new Float32Array(flatNodes.length * 12);
@@ -744,12 +753,16 @@ export class Renderer {
     // BVH BUFFERS
     // DIRICHILET
 
-    const dir_circles = circles.filter(
-      (circle) => circle.boundary_type === BoundaryType.DIRICHILET
-    );
-    const dir_segments = segments.filter(
-      (segment) => segment.boundary_type === BoundaryType.DIRICHILET
-    );
+    const dir_circles = circles
+      .map((circle, i) => ({ circle: circle, index: i }))
+      .filter(
+        (circle) => circle.circle.boundary_type === BoundaryType.DIRICHILET
+      );
+    const dir_segments = segments
+      .map((segment, i) => ({ segment: segment, index: i }))
+      .filter(
+        (segment) => segment.segment.boundary_type === BoundaryType.DIRICHILET
+      );
 
     const BVH_Dir = buildBVH(dir_circles, dir_segments, 8); // CHANGE LATER
     this.bvhDirGeomsBuffer?.destroy();
@@ -772,12 +785,14 @@ export class Renderer {
     device.queue.writeBuffer(this.bvhDirNodeBuffer, 0, BVH_Dir.nodes);
 
     // NEUMANN
-    const neu_circles = circles.filter(
-      (circle) => circle.boundary_type === BoundaryType.NEUMANN
-    );
-    const neu_segments = segments.filter(
-      (segment) => segment.boundary_type === BoundaryType.NEUMANN
-    );
+    const neu_circles = circles
+      .map((circle, i) => ({ circle: circle, index: i }))
+      .filter((circle) => circle.circle.boundary_type === BoundaryType.NEUMANN);
+    const neu_segments = segments
+      .map((segment, i) => ({ segment: segment, index: i }))
+      .filter(
+        (segment) => segment.segment.boundary_type === BoundaryType.NEUMANN
+      );
 
     const BVH_Neu = buildBVH(neu_circles, neu_segments, 8); // CHANGE LATER
     this.bvhNeuGeomsBuffer?.destroy();
