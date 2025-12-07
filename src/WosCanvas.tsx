@@ -12,7 +12,13 @@ import {
 import "./style.css";
 import { Renderer } from "./renderers/renderer";
 
-import { parseKicadPcb, KicadPcb, FootprintPad, Segment } from "kicadts";
+import {
+  parseKicadPcb,
+  KicadPcb,
+  FootprintPad,
+  Segment,
+  Footprint,
+} from "kicadts";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 
@@ -27,6 +33,14 @@ function downloadFile(content: string, fileName: string, contentType: string) {
 
 type Vec2 = { x: number; y: number };
 type EditorMode = "select";
+
+type BoundaryInfo = {
+  boundaryValue: number;
+  boundaryType: BoundaryType;
+};
+
+type BoundarySegment = Segment & BoundaryInfo;
+type BoundaryPad = FootprintPad & BoundaryInfo;
 
 export default function WosCanvas({
   fpsCallback,
@@ -54,12 +68,16 @@ export default function WosCanvas({
     null
   ); // world space
 
-  const [renderer, setRenderer] = useState<Renderer | null>(null);
+  const rendererRef = useRef<Renderer | null>(null);
 
   const [pcbDesign, setPcbDesign] = useState<KicadPcb | null>(null);
 
   const targetPads: FootprintPad[] = [];
-  const targetSegments: Segment[] = [];
+
+  const [targetSegments, setTargetSegments] = useState<BoundarySegment[]>([]);
+  const [targetFootprints, setTargetFootprints] = useState<
+    (Omit<Footprint, "fpPads"> & { fpPads: BoundaryPad[] })[]
+  >([]);
 
   const [selectedPad, setSelectedPad] = useState<FootprintPad | null>(null);
   const [selectedSegment, setSelectedSegment] = useState<Segment | null>(null);
@@ -127,6 +145,8 @@ export default function WosCanvas({
   ];
   const [viewTL, setViewTL] = useState<[number, number]>(simTL); // floats, world space
   const [viewSize, setViewSize] = useState<[number, number]>(simSize); // floats, world space
+
+  const [reactDummyVariable, setReactDummyVariable] = useState(0);
 
   function getWorldPositionFromCanvasUV(
     canvasU: number,
@@ -256,7 +276,7 @@ export default function WosCanvas({
   }
 
   useEffect(() => {
-    renderer?.updateParams({
+    rendererRef.current?.updateParams({
       simulationEnabled: simulationEnabled,
     });
   }, [simulationEnabled]);
@@ -315,64 +335,75 @@ export default function WosCanvas({
 
       console.log("Device", deviceRef.current);
 
-      if (!renderer) {
+      if (!rendererRef.current) {
         console.log("CREATING NEW RENDERER");
-        setRenderer(
-          new Renderer(
-            canvas,
-            gpuContextRef.current!,
-            deviceRef.current!,
-            boardTL,
-            boardSize,
-            simRes,
-            simTL,
-            simSize,
-            viewRes,
-            viewTL,
-            viewSize,
-            simulationEnabled,
-            fpsCallback
-          )
+        rendererRef.current = new Renderer(
+          canvas,
+          gpuContextRef.current!,
+          deviceRef.current!,
+          boardTL,
+          boardSize,
+          simRes,
+          simTL,
+          simSize,
+          viewRes,
+          viewTL,
+          viewSize,
+          simulationEnabled,
+          fpsCallback
         );
       }
     })();
   }, [webgpuCanvasRef.current, uiCanvasRef.current]);
 
-  const drawAbleFootprintPads = useMemo(() => {
-    console.log("drawAbleFootprintPads updated");
-    return (
-      pcbDesign?.footprints.flatMap((footprint) => {
-        return footprint.fpPads
-          .filter((pad) => {
-            return (
-              (pad.shape === "circle" || pad.shape === "oval") &&
-              pad.layers?.layers.some((layer) => {
-                return makeRegexFromWildcardString(layer).test(targetLayer);
-              })
-            );
-          })
-          .map((pad) => {
-            return {
-              x: (footprint.position?.x || 0) + (pad.at?.x || 0), // TODO: Apply rotation
-              y: (footprint.position?.y || 0) + (pad.at?.y || 0),
-              radius: (pad.size?.height || 0) / 2,
-            };
-          });
-      }) ?? []
-    );
-  }, [pcbDesign, targetLayer]);
+  // const currentLayerFootprintPads = useMemo(() => {
+  //   return (
+  //     pcbDesign?.footprints.flatMap((footprint) => {
+  //       return footprint.fpPads.filter((pad) => {
+  //         return (
+  //           (pad.shape === "circle" || pad.shape === "oval") &&
+  //           pad.layers?.layers.some((layer) => {
+  //             return makeRegexFromWildcardString(layer).test(targetLayer);
+  //           })
+  //         );
+  //       });
+  //     }) ?? []
+  //   );
+  // }, [pcbDesign, targetLayer, reactDummyVariable]);
+
+  const drawAbleFootprintPads =
+    targetFootprints.flatMap((footprint) => {
+      return footprint.fpPads
+        .filter((pad) => {
+          return (
+            (pad.shape === "circle" || pad.shape === "oval") &&
+            pad.layers?.layers.some((layer) => {
+              return makeRegexFromWildcardString(layer).test(targetLayer);
+            })
+          );
+        })
+        .map((pad) => {
+          return {
+            x: (footprint.position?.x || 0) + (pad.at?.x || 0), // TODO: Apply rotation
+            y: (footprint.position?.y || 0) + (pad.at?.y || 0),
+            radius: (pad.size?.width || 0) / 2,
+            boundary_value: pad.boundaryValue,
+            boundary_type: pad.boundaryType,
+          };
+        });
+    }) ?? [];
 
   const renderCircles: RenderCircle[] = drawAbleFootprintPads.map((pad) => {
     return {
       center: [pad.x, pad.y],
       radius: pad.radius,
-      boundary_value: Math.random(),
-      boundary_type: BoundaryType.DIRICHILET,
+      boundary_value: pad.boundary_value,
+      boundary_type: pad.boundary_type,
     };
   });
 
   const drawAbleSegments =
-    pcbDesign?.segments.filter((segment) => {
+    targetSegments.filter((segment) => {
       return segment.layer?.names.some((layer) => {
         return makeRegexFromWildcardString(layer).test(targetLayer);
       });
@@ -383,16 +414,16 @@ export default function WosCanvas({
       start: [segment.startPoint?.x || 0, segment.startPoint?.y || 0],
       end: [segment.endPoint?.x || 0, segment.endPoint?.y || 0],
       widthRadius: (segment.width || 0) / 2,
-      boundary_value: Math.random(),
-      boundary_type: BoundaryType.NEUMANN,
+      boundary_value: segment.boundaryValue,
+      boundary_type: segment.boundaryType,
     };
   });
 
   function refreshSimulation() {
     console.log("Possibly refreshing simulation");
-    if (!renderer || !pcbDesign) {
+    if (!rendererRef.current || !pcbDesign) {
       console.log("sike not refreshing: ");
-      console.log("Renderer", renderer);
+      console.log("Renderer", rendererRef.current);
       console.log("PCB Design", pcbDesign);
       return;
     }
@@ -400,7 +431,10 @@ export default function WosCanvas({
     console.log("Found pads:", drawAbleFootprintPads);
     console.log("Found segments:", drawAbleSegments);
 
-    renderer.updateGeometry(renderCircles, renderSegments);
+    console.log("renderCircles", renderCircles);
+    console.log("renderSegments", renderSegments);
+
+    rendererRef.current.updateGeometry(renderCircles, renderSegments);
   }
 
   useEffect(() => {
@@ -426,43 +460,43 @@ export default function WosCanvas({
   }, [uiCanvasRef.current, selectionStart, selectionEnd, isSelecting]);
 
   useEffect(() => {
-    renderer?.updateParams({
+    rendererRef.current?.updateParams({
       viewTL: viewTL,
       viewSize: viewSize,
     });
     // console.log("Updated renderer view", viewTL, viewSize);
-  }, [renderer, viewTL, viewSize]);
+  }, [rendererRef.current, viewTL, viewSize]);
 
   useEffect(() => {
-    renderer?.updateParams({
+    rendererRef.current?.updateParams({
       viewRes: viewRes,
     });
     // console.log("Updated renderer res", viewRes);
-  }, [renderer, viewRes]);
+  }, [rendererRef.current, viewRes]);
 
   useEffect(() => {
-    renderer?.updateParams({
+    rendererRef.current?.updateParams({
       simTL: simTL,
       simSize: simSize,
     });
-    renderer?.resetSim();
-    console.log("Updated renderer sim", simTL, simSize);
-  }, [renderer, simTL, simSize]);
+    rendererRef.current?.resetSim();
+    console.log("Updated rendererRef.current sim", simTL, simSize);
+  }, [rendererRef.current, simTL, simSize]);
 
   useEffect(() => {
-    renderer?.updateParams({
+    rendererRef.current?.updateParams({
       simRes: simRes,
     });
     console.log("Updated renderer sim res", simRes);
-  }, [renderer, simRes]);
+  }, [rendererRef.current, simRes]);
 
   useEffect(() => {
-    renderer?.updateParams({
+    rendererRef.current?.updateParams({
       boardTL: boardTL,
       boardSize: boardSize,
     });
     console.log("Updated renderer board", boardTL, boardSize);
-  }, [renderer, boardTL, boardSize]);
+  }, [rendererRef.current, boardTL, boardSize]);
 
   useEffect(() => {
     setSimTL(boardTL);
@@ -472,18 +506,27 @@ export default function WosCanvas({
   useEffect(() => {
     refreshSimulation();
     console.log("Refreshed simulation");
-  }, [renderer, pcbDesign]);
+  }, [rendererRef.current, pcbDesign, reactDummyVariable]);
 
   const updateTraceWidth = (width: number) => {
     setTraceWidth(width);
     if (selectedPad) {
-      selectedPad.width = width;
+      if (!selectedPad.size) {
+        selectedPad.size = {
+          width: width,
+          height: width,
+        };
+      } else {
+        selectedPad.size.width = width;
+      }
+      console.log("Updated selected pad", selectedPad);
     }
     if (selectedSegment) {
       selectedSegment.width = width;
     }
     if (selectedPad || selectedSegment) {
-      refreshSimulation();
+      console.log("Updated selected pad or segment");
+      setReactDummyVariable((prev) => prev + 1);
     }
   };
 
@@ -542,7 +585,29 @@ export default function WosCanvas({
               const file = target.files[0];
               const content = await file.text();
               const pcb = parseKicadPcb(content);
+
               setPcbDesign(pcb);
+              setTargetSegments(
+                pcb?.segments.map((segment) =>
+                  Object.assign(segment, {
+                    boundaryValue: Math.random(),
+                    boundaryType: BoundaryType.NEUMANN,
+                  })
+                ) || []
+              );
+
+              setTargetFootprints(
+                pcb?.footprints.map((footprint) =>
+                  Object.assign(footprint, {
+                    fpPads: footprint.fpPads.map((pad) =>
+                      Object.assign(pad, {
+                        boundaryValue: Math.random(),
+                        boundaryType: BoundaryType.DIRICHILET,
+                      })
+                    ),
+                  })
+                ) || []
+              );
 
               console.log("Parsed KiCad PCB file:", pcb);
             }
@@ -583,7 +648,7 @@ export default function WosCanvas({
           }}
           onClick={handleResMenuClick}
         >
-          Resolution
+          Sim Resolution
         </Button>
         <Menu
           id="basic-menu"
@@ -645,7 +710,7 @@ export default function WosCanvas({
                   return;
                 }
                 const drawAbleFootprintPads: FootprintPad[] =
-                  pcbDesign.footprints.flatMap((footprint) => {
+                  targetFootprints.flatMap((footprint) => {
                     return (
                       footprint.fpPads
                         .filter((pad) => {
@@ -671,11 +736,14 @@ export default function WosCanvas({
                         }) ?? []
                     );
                   });
-                console.log("drawAbleFootprintPads", drawAbleFootprintPads);
+                console.log(
+                  "drawAbleFootprintPads for selection",
+                  drawAbleFootprintPads
+                );
                 setSelectedPad(drawAbleFootprintPads[0] ?? null);
 
                 setSelectedSegment(
-                  pcbDesign.segments
+                  targetSegments
                     .filter((segment) => {
                       return segment.layer?.names.some((layer) => {
                         return makeRegexFromWildcardString(layer).test(
