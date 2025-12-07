@@ -417,6 +417,13 @@ export default function WosCanvas({
 
   useEffect(() => {
     renderer?.updateParams({
+      viewRes: viewRes,
+    });
+    // console.log("Updated renderer view", viewTL, viewSize);
+  }, [renderer, viewRes]);
+
+  useEffect(() => {
+    renderer?.updateParams({
       simTL: simTL,
       simSize: simSize,
     });
@@ -725,6 +732,7 @@ export default function WosCanvas({
                 worldPos.y,
               ];
               const newSelectionEnd: [number, number] = [...newSelectionStart];
+
               setSelectionStart(newSelectionStart);
               setSelectionEnd(newSelectionEnd);
             }
