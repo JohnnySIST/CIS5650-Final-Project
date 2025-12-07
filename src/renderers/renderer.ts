@@ -819,6 +819,7 @@ export class Renderer {
   private createViewProperitiesBuffers() {
     const device = this.device;
 
+    this.viewResBuffer?.destroy();
     this.viewResBuffer = device.createBuffer({
       label: "View Res Buffer",
       size: 8,
@@ -829,6 +830,7 @@ export class Renderer {
 
     device.queue.writeBuffer(this.viewResBuffer, 0, viewResData);
 
+    this.viewTLBuffer?.destroy();
     this.viewTLBuffer = device.createBuffer({
       label: "View TL Buffer",
       size: 8,
@@ -839,6 +841,7 @@ export class Renderer {
 
     device.queue.writeBuffer(this.viewTLBuffer, 0, viewTLData);
 
+    this.viewSizeBuffer?.destroy();
     this.viewSizeBuffer = device.createBuffer({
       label: "View Size Buffer",
       size: 8,
