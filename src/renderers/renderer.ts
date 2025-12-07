@@ -591,7 +591,9 @@ export class Renderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
+    // @ts-ignore
     device.queue.writeBuffer(this.bvhDirGeomsBuffer, 0, BVH_Dir.geoms);
+    // @ts-ignore
     device.queue.writeBuffer(this.bvhDirNodeBuffer, 0, BVH_Dir.nodes);
 
     // NEUMANN
@@ -610,7 +612,9 @@ export class Renderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
+    // @ts-ignore
     device.queue.writeBuffer(this.bvhNeuGeomsBuffer, 0, BVH_Neu.geoms);
+    // @ts-ignore
     device.queue.writeBuffer(this.bvhNeuNodeBuffer, 0, BVH_Neu.nodes);
   }
 
