@@ -41,6 +41,7 @@ type BoundaryInfo = {
 
 type BoundarySegment = Segment & BoundaryInfo;
 type BoundaryPad = FootprintPad & BoundaryInfo;
+type BoundaryFootprint = Omit<Footprint, "fpPads"> & { fpPads: BoundaryPad[] };
 
 export default function WosCanvas({
   fpsCallback,
@@ -75,12 +76,13 @@ export default function WosCanvas({
   const targetPads: FootprintPad[] = [];
 
   const [targetSegments, setTargetSegments] = useState<BoundarySegment[]>([]);
-  const [targetFootprints, setTargetFootprints] = useState<
-    (Omit<Footprint, "fpPads"> & { fpPads: BoundaryPad[] })[]
-  >([]);
+  const [targetFootprints, setTargetFootprints] = useState<BoundaryFootprint[]>(
+    []
+  );
 
-  const [selectedPad, setSelectedPad] = useState<FootprintPad | null>(null);
-  const [selectedSegment, setSelectedSegment] = useState<Segment | null>(null);
+  const [selectedPad, setSelectedPad] = useState<BoundaryPad | null>(null);
+  const [selectedSegment, setSelectedSegment] =
+    useState<BoundarySegment | null>(null);
   const [targetLayer, setTargetLayer] = useState("B.Cu");
 
   const edgeCutSegments = useMemo(() => {
@@ -741,8 +743,8 @@ export default function WosCanvas({
                 if (!pcbDesign) {
                   return;
                 }
-                const drawAbleFootprintPads: FootprintPad[] =
-                  targetFootprints.flatMap((footprint) => {
+                const drawAbleFootprintPads = targetFootprints.flatMap(
+                  (footprint) => {
                     return (
                       footprint.fpPads
                         .filter((pad) => {
@@ -767,7 +769,8 @@ export default function WosCanvas({
                           return dist < (pad.size?.height || 0) / 2;
                         }) ?? []
                     );
-                  });
+                  }
+                );
                 console.log(
                   "drawAbleFootprintPads for selection",
                   drawAbleFootprintPads
