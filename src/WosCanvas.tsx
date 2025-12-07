@@ -260,41 +260,26 @@ export default function WosCanvas({
 
       console.log("Device", deviceRef.current);
 
-      setRenderer(
-        new Renderer(
-          canvas,
-          gpuContextRef.current!,
-          deviceRef.current!,
-          boardTL,
-          boardSize,
-          simRes,
-          simTL,
-          simSize,
-          viewRes,
-          viewTL,
-          viewSize,
-          simulationEnabled,
-          fpsCallback
-        )
-      );
-
-      console.log("Renderer", renderer);
-
-      // const camera = new Camera2D();
-      // camera.init(canvas, uiCanvas);
-
-      window.addEventListener("mouseup", (e) => {
-        if (e.button === 1) {
-          setIsPanning(false);
-          canvas.style.cursor = "default";
-        }
-      });
-
-      window.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") {
-          setEditorMode("select");
-        }
-      });
+      if (!renderer) {
+        console.log("CREATING NEW RENDERER");
+        setRenderer(
+          new Renderer(
+            canvas,
+            gpuContextRef.current!,
+            deviceRef.current!,
+            boardTL,
+            boardSize,
+            simRes,
+            simTL,
+            simSize,
+            viewRes,
+            viewTL,
+            viewSize,
+            simulationEnabled,
+            fpsCallback
+          )
+        );
+      }
     })();
   }, [webgpuCanvasRef.current, uiCanvasRef.current]);
 
@@ -387,13 +372,13 @@ export default function WosCanvas({
   });
 
   async function refreshSimulation() {
-    console.log("Refreshing simulation");
+    console.log("Possibly refreshing simulation");
     if (!renderer || !pcbDesign) {
       console.log("Renderer", renderer);
       console.log("PCB Design", pcbDesign);
       return;
     }
-    console.log("Refreshing simulation 2");
+    console.log("Actually refreshing simulation for real");
     console.log("Found pads:", drawAbleFootprintPads);
     console.log("Found segments:", drawAbleSegments);
 
@@ -427,7 +412,7 @@ export default function WosCanvas({
       viewTL: viewTL,
       viewSize: viewSize,
     });
-    console.log("Updated renderer view", viewTL, viewSize);
+    // console.log("Updated renderer view", viewTL, viewSize);
   }, [renderer, viewTL, viewSize]);
 
   useEffect(() => {
@@ -435,6 +420,7 @@ export default function WosCanvas({
       simTL: simTL,
       simSize: simSize,
     });
+    renderer?.resetSim();
     console.log("Updated renderer sim", simTL, simSize);
   }, [renderer, simTL, simSize]);
 
@@ -449,7 +435,7 @@ export default function WosCanvas({
   useEffect(() => {
     refreshSimulation();
     console.log("Refreshed simulation");
-  }, [renderer, pcbDesign, simTL, simSize]);
+  }, [renderer, pcbDesign]);
 
   const updateTraceWidth = (width: number) => {
     setTraceWidth(width);
@@ -460,7 +446,8 @@ export default function WosCanvas({
       selectedSegment.width = width;
     }
     if (selectedPad || selectedSegment) {
-      refreshSimulation();
+      setPcbDesign(null);
+      setPcbDesign(pcbDesign);
     }
   };
 
@@ -781,6 +768,11 @@ export default function WosCanvas({
           }}
           onContextMenu={(e) => {
             e.preventDefault();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setEditorMode("select");
+            }
           }}
         />
       </div>

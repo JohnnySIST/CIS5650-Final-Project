@@ -1,7 +1,8 @@
-import { FpCircleCenter } from "kicadts";
 import uvPreCompute from "/src/shaders/uvPreprocessCompute.wgsl?raw";
 import wosCompute from "/src/shaders/wosCompute.wgsl?raw";
 import wosRender from "/src/shaders/wosRender.wgsl?raw";
+
+import { example_circles, example_segments } from "./example_data";
 
 export interface Circle {
   center: [number, number];
@@ -313,62 +314,6 @@ export function buildBVH(
   };
 }
 
-const example_circles: Circle[] = [
-  // Large circles
-  { center: [0.0, 0.0], radius: 0.15, boundary_value: 1.0 },
-  { center: [-0.6, 0.4], radius: 0.15, boundary_value: 0.5 },
-  { center: [0.6, -0.4], radius: 0.18, boundary_value: 0.8 },
-
-  // Medium circles
-  { center: [-0.7, -0.7], radius: 0.06, boundary_value: 0.3 },
-  { center: [0.7, 0.7], radius: 0.07, boundary_value: 0.7 },
-  { center: [0.3, 0.3], radius: 0.08, boundary_value: 0.9 },
-  { center: [-0.3, -0.5], radius: 0.03, boundary_value: 0.4 },
-  { center: [0.44, 0.04], radius: 0.05, boundary_value: 0.6 },
-
-  // Small circles
-  { center: [-0.1, 0.64], radius: 0.08, boundary_value: 1.0 },
-  { center: [0.82, -0.7], radius: 0.07, boundary_value: 0.2 },
-  { center: [-0.44, -0.1], radius: 0.09, boundary_value: 0.5 },
-  { center: [0.16, -0.64], radius: 0.06, boundary_value: 0.8 },
-  { center: [-0.76, 0.84], radius: 0.085, boundary_value: 0.35 },
-
-  // Tiny circles (details)
-  { center: [-0.16, -0.24], radius: 0.04, boundary_value: 0.65 },
-  { center: [0.36, 0.76], radius: 0.045, boundary_value: 0.95 },
-  { center: [0.64, 0.24], radius: 0.035, boundary_value: 0.45 },
-  { center: [-0.5, 0.16], radius: 0.05, boundary_value: 0.75 },
-  { center: [0.1, 0.84], radius: 0.038, boundary_value: 0.25 },
-  { center: [0.76, -0.16], radius: 0.042, boundary_value: 0.55 },
-  { center: [-0.64, -0.3], radius: 0.048, boundary_value: 0.85 },
-
-  // Additional medium circles (new)
-  { center: [-0.85, 0.0], radius: 0.08, boundary_value: 0.42 },
-  { center: [0.85, 0.15], radius: 0.09, boundary_value: 0.68 },
-  { center: [0.0, -0.75], radius: 0.07, boundary_value: 0.52 },
-  { center: [-0.3, 0.85], radius: 0.06, boundary_value: 0.78 },
-  { center: [0.5, 0.6], radius: 0.065, boundary_value: 0.33 },
-
-  // Additional small circles (new)
-  { center: [-0.9, -0.4], radius: 0.05, boundary_value: 0.61 },
-  { center: [0.9, -0.25], radius: 0.048, boundary_value: 0.47 },
-  { center: [-0.25, -0.85], radius: 0.052, boundary_value: 0.71 },
-  { center: [0.38, -0.85], radius: 0.046, boundary_value: 0.39 },
-  { center: [-0.82, 0.55], radius: 0.055, boundary_value: 0.88 },
-
-  // Additional tiny circles (new)
-  { center: [0.22, 0.52], radius: 0.035, boundary_value: 0.44 },
-  { center: [-0.38, 0.62], radius: 0.032, boundary_value: 0.66 },
-  { center: [0.52, -0.12], radius: 0.038, boundary_value: 0.54 },
-  { center: [-0.12, 0.36], radius: 0.03, boundary_value: 0.82 },
-  { center: [0.18, -0.32], radius: 0.034, boundary_value: 0.37 },
-];
-
-const example_segments: Segment[] = [
-  { start: [-1, -1], end: [1, 1], widthRadius: 0.05, boundary_value: 0.5 },
-  { start: [1, -1], end: [-1, 1], widthRadius: 0.05, boundary_value: 0.5 },
-];
-
 export class Renderer {
   private format: GPUTextureFormat;
   private canvas: HTMLCanvasElement;
@@ -432,7 +377,7 @@ export class Renderer {
   private viewTL: [number, number]; // floats, world space
   private viewSize: [number, number]; // floats, world space
 
-  private minMaxBvals: [number, number]; // STORES THE MIN AND MAX B VALUE FOR COLOR REMAPPING
+  private minMaxBvals: [number, number] = [Number.MAX_VALUE, Number.MIN_VALUE]; // STORES THE MIN AND MAX B VALUE FOR COLOR REMAPPING
 
   private simUpdateId: number = 0;
 
@@ -559,17 +504,7 @@ export class Renderer {
     }
   }
 
-  async setCircles(
-    circles: Circle[] = example_circles,
-    segments: Segment[] = example_segments
-  ) {
-    this.simUpdateId += 1;
-    const canvas = this.canvas;
-    const context = this.context;
-    const device = this.device;
-
-    this.minMaxBvals = [0.0, 0.0]; // [MIN, MAX]
-
+  private createCircleBuffer(circles: Circle[]) {
     const circleData = new Float32Array(circles.length * 4);
     for (let i = 0; i < circles.length; i++) {
       const offset = i * 4;
@@ -587,54 +522,62 @@ export class Renderer {
       }
     }
 
-    this.circleGeomBuffer = device.createBuffer({
+    this.circleGeomBuffer?.destroy();
+
+    this.circleGeomBuffer = this.device.createBuffer({
       label: "circle geo buffer",
       size: circles.length * 4 * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    device.queue.writeBuffer(this.circleGeomBuffer, 0, circleData);
+    this.device.queue.writeBuffer(this.circleGeomBuffer, 0, circleData);
+  }
 
+  private createSegmentBuffer(segments: Segment[]) {
     const segmentData = new Float32Array(segments.length * 6);
     for (let i = 0; i < segments.length; i++) {
       const offset = i * 6;
-      segmentData[offset + 0] = segments[i].start[0]; // start.x
-      segmentData[offset + 1] = segments[i].start[1]; // start.y
-      segmentData[offset + 2] = segments[i].end[0]; // end.x
-      segmentData[offset + 3] = segments[i].end[1]; // end.y
+      segmentData[offset + 0] = segments[i].start[0];
+      segmentData[offset + 1] = segments[i].start[1];
+      segmentData[offset + 2] = segments[i].end[0];
+      segmentData[offset + 3] = segments[i].end[1];
       segmentData[offset + 4] = segments[i].widthRadius;
       segmentData[offset + 5] = segments[i].boundary_value;
 
-      if (segments[i].boundary_value < this.minMaxBvals[0]) {
-        this.minMaxBvals[0] = segments[i].boundary_value;
-      }
-
-      if (segments[i].boundary_value > this.minMaxBvals[1]) {
-        this.minMaxBvals[1] = segments[i].boundary_value;
-      }
+      this.minMaxBvals[0] = Math.min(
+        this.minMaxBvals[0],
+        segments[i].boundary_value
+      );
+      this.minMaxBvals[1] = Math.max(
+        this.minMaxBvals[1],
+        segments[i].boundary_value
+      );
     }
 
-    this.segmentGeomBuffer = device.createBuffer({
+    this.segmentGeomBuffer?.destroy();
+    this.segmentGeomBuffer = this.device.createBuffer({
       label: "segment geo buffer",
       size: segments.length * 6 * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    device.queue.writeBuffer(this.segmentGeomBuffer, 0, segmentData);
+    this.device.queue.writeBuffer(this.segmentGeomBuffer, 0, segmentData);
+  }
 
-    // =============================
-    // SETUP A BVH BUFFERS HERE
-    // =============================
+  private createBVHBuffers(circles: Circle[], segments: Segment[]) {
+    const device = this.device;
 
     // BVH BUFFERS
     // DIRICHILET
     const BVH_Dir = buildBVH(circles, [], 16); // CHANGE LATER
+    this.bvhDirGeomsBuffer?.destroy();
     this.bvhDirGeomsBuffer = device.createBuffer({
       label: "bvh Dir geoms buffer",
       size: BVH_Dir.geoms.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
+    this.bvhDirNodeBuffer?.destroy();
     this.bvhDirNodeBuffer = device.createBuffer({
       label: "bvh Dir node buffer",
       size: BVH_Dir.nodes.byteLength,
@@ -646,12 +589,14 @@ export class Renderer {
 
     // NEUMANN
     const BVH_Neu = buildBVH([], segments, 16); // CHANGE LATER
+    this.bvhNeuGeomsBuffer?.destroy();
     this.bvhNeuGeomsBuffer = device.createBuffer({
       label: "bvh Neu geoms buffer",
       size: BVH_Neu.geoms.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
+    this.bvhNeuNodeBuffer?.destroy();
     this.bvhNeuNodeBuffer = device.createBuffer({
       label: "bvh Neu node buffer",
       size: BVH_Neu.nodes.byteLength,
@@ -660,21 +605,23 @@ export class Renderer {
 
     device.queue.writeBuffer(this.bvhNeuGeomsBuffer, 0, BVH_Neu.geoms);
     device.queue.writeBuffer(this.bvhNeuNodeBuffer, 0, BVH_Neu.nodes);
+  }
 
-    // =============================
-    //    UV PREPROCESS SETUP
-    // =============================
-
-    this.uvPre_Pipeline = device.createComputePipeline({
+  private createUVPrePipeline() {
+    this.uvPre_Pipeline = this.device.createComputePipeline({
       label: "uv preprocess compute",
       layout: "auto",
       compute: {
-        module: device.createShaderModule({ code: uvPreCompute }),
+        module: this.device.createShaderModule({ code: uvPreCompute }),
         entryPoint: "main",
       },
     });
+  }
 
-    // THIS IS THE SCREEN DIMS USED FOR PATHING
+  private createSimPropertiesBuffers() {
+    const device = this.device;
+
+    this.simResBuffer?.destroy();
     this.simResBuffer = device.createBuffer({
       label: "Sim Res Buffer",
       size: 8,
@@ -684,6 +631,7 @@ export class Renderer {
     const simResData = new Uint32Array(this.simRes);
     device.queue.writeBuffer(this.simResBuffer, 0, simResData);
 
+    this.simTLBuffer?.destroy();
     this.simTLBuffer = device.createBuffer({
       label: "Sim TL Buffer",
       size: 8,
@@ -693,6 +641,7 @@ export class Renderer {
     const simTLData = new Float32Array(this.simTL);
     device.queue.writeBuffer(this.simTLBuffer, 0, simTLData);
 
+    this.simSizeBuffer?.destroy();
     this.simSizeBuffer = device.createBuffer({
       label: "Sim Size Buffer",
       size: 8,
@@ -701,8 +650,12 @@ export class Renderer {
 
     const simSizeData = new Float32Array(this.simSize);
     device.queue.writeBuffer(this.simSizeBuffer, 0, simSizeData);
+  }
 
-    // board dims
+  private createBoardPropertiesBuffers() {
+    const device = this.device;
+
+    this.boardTLBuffer?.destroy();
     this.boardTLBuffer = device.createBuffer({
       label: "Board TL Buffer",
       size: 8,
@@ -712,6 +665,7 @@ export class Renderer {
     const boardTLData = new Float32Array(this.boardTL);
     device.queue.writeBuffer(this.boardTLBuffer, 0, boardTLData);
 
+    this.boardSizeBuffer?.destroy();
     this.boardSizeBuffer = device.createBuffer({
       label: "Board Size Buffer",
       size: 8,
@@ -720,9 +674,10 @@ export class Renderer {
 
     const boardSizeData = new Float32Array(this.boardSize);
     device.queue.writeBuffer(this.boardSizeBuffer, 0, boardSizeData);
+  }
 
-    // BIND GEOMETRY DATA
-    this.domainSizeBindGroup_uvPre = device.createBindGroup({
+  private createUVPrePipelineBindGroups() {
+    this.domainSizeBindGroup_uvPre = this.device.createBindGroup({
       label: "domain size uvPre bg",
       layout: this.uvPre_Pipeline.getBindGroupLayout(0),
       entries: [
@@ -736,7 +691,13 @@ export class Renderer {
       ],
     });
 
-    this.bvhBindGroup_uvPre = device.createBindGroup({
+    this.uvBindGroup_uvPre = this.device.createBindGroup({
+      label: "uv bg compute",
+      layout: this.uvPre_Pipeline.getBindGroupLayout(1),
+      entries: [{ binding: 0, resource: { buffer: this.uvBuffer } }],
+    });
+
+    this.bvhBindGroup_uvPre = this.device.createBindGroup({
       label: "bvh uvPre BG",
       layout: this.uvPre_Pipeline.getBindGroupLayout(2),
       entries: [
@@ -746,9 +707,12 @@ export class Renderer {
         { binding: 3, resource: { buffer: this.bvhNeuNodeBuffer } },
       ],
     });
+  }
 
+  private createUVBuffer() {
     // THIS STORES UVs ON SCREEN FOR QUEERY POINTS
-    this.uvBuffer = device.createBuffer({
+    this.uvBuffer?.destroy();
+    this.uvBuffer = this.device.createBuffer({
       label: "uv buffer",
       size: this.simRes[0] * this.simRes[1] * 8,
       usage:
@@ -756,31 +720,43 @@ export class Renderer {
         GPUBufferUsage.COPY_DST |
         GPUBufferUsage.COPY_SRC,
     });
+  }
 
-    this.uvBindGroup_uvPre = device.createBindGroup({
-      label: "uv bg compute",
-      layout: this.uvPre_Pipeline.getBindGroupLayout(1),
-      entries: [{ binding: 0, resource: { buffer: this.uvBuffer } }],
-    });
-
-    // ===============================
-    //    WOS COMPUTE SHADER SETUP
-    // ===============================
-
-    this.wos_pipeline = device.createComputePipeline({
+  private createWOSPipeline() {
+    this.wos_pipeline = this.device.createComputePipeline({
       label: "wos compute",
       layout: "auto",
       compute: {
-        module: device.createShaderModule({ code: wosCompute }),
+        module: this.device.createShaderModule({ code: wosCompute }),
         entryPoint: "main",
       },
     });
+  }
 
-    this.walkCountBuffer = device.createBuffer({
+  private createWalkCountBuffer() {
+    this.walkCountBuffer?.destroy();
+    this.walkCountBuffer = this.device.createBuffer({
       label: "Walk Count Buffer",
       size: 4,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
+  }
+
+  private createWOSValuesBuffer() {
+    const device = this.device;
+    this.wosValuesBuffer?.destroy();
+    this.wosValuesBuffer = device.createBuffer({
+      label: "wos values buffer",
+      size: this.simRes[0] * this.simRes[1] * 4,
+      usage:
+        GPUBufferUsage.STORAGE |
+        GPUBufferUsage.COPY_DST |
+        GPUBufferUsage.COPY_SRC,
+    });
+  }
+
+  private createWOSPipelineBindGroups() {
+    const device = this.device;
 
     this.domainSizeBindGroup_wos = device.createBindGroup({
       label: "domain size wos bg",
@@ -795,15 +771,6 @@ export class Renderer {
         { binding: 6, resource: { buffer: this.circleGeomBuffer } },
         { binding: 7, resource: { buffer: this.segmentGeomBuffer } },
       ],
-    });
-
-    this.wosValuesBuffer = device.createBuffer({
-      label: "wos values buffer",
-      size: this.simRes[0] * this.simRes[1] * 4,
-      usage:
-        GPUBufferUsage.STORAGE |
-        GPUBufferUsage.COPY_DST |
-        GPUBufferUsage.COPY_SRC,
     });
 
     this.uvBindGroup_compute = device.createBindGroup({
@@ -825,11 +792,10 @@ export class Renderer {
         { binding: 3, resource: { buffer: this.bvhNeuNodeBuffer } },
       ],
     });
+  }
 
-    // ======================================
-    //    OUTPUT VERT / FRAG FOR RENDERING
-    // ======================================
-
+  private createWOSRenderPipeline() {
+    const device = this.device;
     this.renderPipeline = device.createRenderPipeline({
       layout: "auto",
       vertex: {
@@ -848,6 +814,10 @@ export class Renderer {
         targets: [{ format: this.format }],
       },
     });
+  }
+
+  private createViewProperitiesBuffers() {
+    const device = this.device;
 
     this.viewResBuffer = device.createBuffer({
       label: "View Res Buffer",
@@ -877,7 +847,12 @@ export class Renderer {
 
     const viewSizeData = new Float32Array(this.viewSize);
     device.queue.writeBuffer(this.viewSizeBuffer, 0, viewSizeData);
+  }
 
+  private createMinMaxBValsBuffer() {
+    const device = this.device;
+
+    this.minMaxBValsBuffer?.destroy();
     this.minMaxBValsBuffer = device.createBuffer({
       label: "min max bval buffer",
       size: 8,
@@ -889,8 +864,10 @@ export class Renderer {
       0,
       new Float32Array(this.minMaxBvals)
     );
+  }
 
-    this.domainSizeBindGroup_frag = device.createBindGroup({
+  private createWOSRenderBindGroups() {
+    this.domainSizeBindGroup_frag = this.device.createBindGroup({
       label: "domain size frag bg",
       layout: this.renderPipeline.getBindGroupLayout(0),
       entries: [
@@ -907,7 +884,7 @@ export class Renderer {
       ],
     });
 
-    this.uvBindGroup_frag = device.createBindGroup({
+    this.uvBindGroup_frag = this.device.createBindGroup({
       label: "uv bg frag",
       layout: this.renderPipeline.getBindGroupLayout(1),
       entries: [
@@ -915,6 +892,55 @@ export class Renderer {
         { binding: 0, resource: { buffer: this.wosValuesBuffer } },
       ],
     });
+  }
+
+  async setCircles(
+    circles: Circle[] = example_circles,
+    segments: Segment[] = example_segments
+  ) {
+    this.simUpdateId += 1;
+
+    this.createCircleBuffer(circles);
+    this.createSegmentBuffer(segments);
+
+    // =============================
+    // SETUP A BVH BUFFERS HERE
+    // =============================
+
+    this.createBVHBuffers(circles, segments);
+
+    // =============================
+    //    UV PREPROCESS SETUP
+    // =============================
+
+    this.createUVPrePipeline();
+
+    this.createSimPropertiesBuffers();
+
+    this.createBoardPropertiesBuffers();
+
+    // BIND GEOMETRY DATA
+    this.createUVBuffer();
+
+    this.createUVPrePipelineBindGroups();
+
+    // ===============================
+    //    WOS COMPUTE SHADER SETUP
+    // ===============================
+    this.createWOSPipeline();
+
+    this.createWalkCountBuffer();
+    this.createWOSValuesBuffer();
+    this.createWOSPipelineBindGroups();
+
+    // ======================================
+    //    OUTPUT VERT / FRAG FOR RENDERING
+    // ======================================
+    this.createWOSRenderPipeline();
+
+    this.createViewProperitiesBuffers();
+    this.createMinMaxBValsBuffer();
+    this.createWOSRenderBindGroups();
 
     // ===============================
     //    THIS RENDERS STUFF :)
@@ -923,10 +949,24 @@ export class Renderer {
     requestAnimationFrame(() => this.frame(this.simUpdateId));
   }
 
+  resetSim() {
+    this.simUpdateId++;
+    this.simulationEnabled = true;
+    this.totalWalks = 0;
+    this.device.queue.writeBuffer(
+      this.wosValuesBuffer,
+      0,
+      new Float32Array(this.wosValuesBuffer.size / 4).fill(0)
+    );
+    requestAnimationFrame(() => this.frame(this.simUpdateId));
+  }
+
   private frame(simUpdateId: number) {
-    if (simUpdateId !== this.simUpdateId) {
-      return;
-    }
+    // console.log("frame: ", simUpdateId, " and ", this.simUpdateId);
+    // if (simUpdateId !== this.simUpdateId) {
+    //   console.log("frame: ", simUpdateId, " != ", this.simUpdateId);
+    //   return;
+    // }
 
     this.frameCount++;
     const now = performance.now();
