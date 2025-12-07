@@ -438,7 +438,6 @@ fn queryBVHNeu(pos: vec2f) -> NeumannHit {
                     dist = hitResult.dist;
                     bVal = hitResult.flux;
                     bNorm = hitResult.normal;
-                    
                 } else {
                     if geom.index >= arrayLength(&segments) { continue; }
                     let segment = segments[geom.index];

@@ -1,5 +1,5 @@
-import React, { useRef, useEffect, useState } from "react";
 import Button from "@mui/material/Button";
+import React, { useRef, useEffect, useState, useMemo } from "react";
 import { assert, makeRegexFromWildcardString } from "./utils/util";
 import TraceWidthSlider from "./ui/TraceWidthSlider";
 
@@ -68,9 +68,6 @@ export default function WosCanvas({
   ];
   const [viewTL, setViewTL] = useState<[number, number]>(simTL); // floats, world space
   const [viewSize, setViewSize] = useState<[number, number]>(simSize); // floats, world space
-
-  // const [boardTL, setBoardTL] = useState<[number, number]>(); // floats, world space
-  // const [boardSize, setBoardSize] = useState<[number, number]>(); // floats, world space
 
   const [renderer, setRenderer] = useState<Renderer | null>(null);
 
@@ -262,77 +259,80 @@ export default function WosCanvas({
             maxStorageBuffersPerShaderStage: 10,
           },
         }));
+      if (!deviceRef.current) {
+        const h = document.querySelector("#title") as HTMLElement;
+        h.innerText = "Device is not available.";
+        return;
+      }
 
       console.log("Device", deviceRef.current);
 
-      setRenderer(
-        new Renderer(
-          canvas,
-          gpuContextRef.current!,
-          deviceRef.current!,
-          boardTL,
-          boardSize,
-          simRes,
-          simTL,
-          simSize,
-          viewRes,
-          viewTL,
-          viewSize,
-          simulationEnabled,
-          fpsCallback
-        )
-      );
-
-      console.log("Renderer", renderer);
-
-      // const camera = new Camera2D();
-      // camera.init(canvas, uiCanvas);
-
-      window.addEventListener("mouseup", (e) => {
-        if (e.button === 1) {
-          setIsPanning(false);
-          canvas.style.cursor = "default";
-        }
-      });
-
-      window.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") {
-          setEditorMode("select");
-        }
-      });
+      if (!renderer) {
+        console.log("CREATING NEW RENDERER");
+        setRenderer(
+          new Renderer(
+            canvas,
+            gpuContextRef.current!,
+            deviceRef.current!,
+            boardTL,
+            boardSize,
+            simRes,
+            simTL,
+            simSize,
+            viewRes,
+            viewTL,
+            viewSize,
+            simulationEnabled,
+            fpsCallback
+          )
+        );
+      }
     })();
   }, [webgpuCanvasRef.current, uiCanvasRef.current]);
 
-  const edgeCutSegments = pcbDesign?.graphicLines.filter((line) => {
-    return line.layer?.names.some((layer) => {
-      return makeRegexFromWildcardString(layer).test("Edge.Cuts");
+  const edgeCutSegments = useMemo(() => {
+    console.log("edge cut segments updated");
+    return pcbDesign?.graphicLines.filter((line) => {
+      return line.layer?.names.some((layer) => {
+        return makeRegexFromWildcardString(layer).test("Edge.Cuts");
+      });
     });
-  });
+  }, [pcbDesign]);
 
-  const boardTL: [number, number] = edgeCutSegments?.reduce(
-    (acc, line) => {
-      return [
-        Math.min(acc[0], line.startPoint?.x || Number.POSITIVE_INFINITY),
-        Math.min(acc[1], line.startPoint?.y || Number.POSITIVE_INFINITY),
-      ];
-    },
-    [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY]
-  ) ?? [120, 90];
+  const boardTL: [number, number] = useMemo(() => {
+    console.log("boardTL updated");
+    return (
+      edgeCutSegments?.reduce(
+        (acc, line) => {
+          return [
+            Math.min(acc[0], line.startPoint?.x || Number.POSITIVE_INFINITY),
+            Math.min(acc[1], line.startPoint?.y || Number.POSITIVE_INFINITY),
+          ];
+        },
+        [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY]
+      ) ?? [120, 90]
+    );
+  }, [edgeCutSegments]);
 
-  const boardBR: [number, number] = edgeCutSegments?.reduce(
-    (acc, line) => {
-      return [
-        Math.max(acc[0], line.endPoint?.x || Number.NEGATIVE_INFINITY),
-        Math.max(acc[1], line.endPoint?.y || Number.NEGATIVE_INFINITY),
-      ];
-    },
-    [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY]
-  ) ?? [180, 150];
+  const boardBR: [number, number] = useMemo(() => {
+    console.log("boardBR updated");
+    return (
+      edgeCutSegments?.reduce(
+        (acc, line) => {
+          return [
+            Math.max(acc[0], line.endPoint?.x || Number.NEGATIVE_INFINITY),
+            Math.max(acc[1], line.endPoint?.y || Number.NEGATIVE_INFINITY),
+          ];
+        },
+        [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY]
+      ) ?? [180, 150]
+    );
+  }, [edgeCutSegments]);
 
-  const boardSize: [number, number] = [
-    boardBR[0] - boardTL[0],
-    boardBR[1] - boardTL[1],
-  ];
+  const boardSize: [number, number] = useMemo(() => {
+    console.log("boardSize updated");
+    return [boardBR[0] - boardTL[0], boardBR[1] - boardTL[1]];
+  }, [boardBR, boardTL]);
 
   const drawAbleFootprintPads =
     pcbDesign?.footprints.flatMap((footprint) => {
@@ -379,17 +379,17 @@ export default function WosCanvas({
   });
 
   async function refreshSimulation() {
-    console.log("Refreshing simulation");
+    console.log("Possibly refreshing simulation");
     if (!renderer || !pcbDesign) {
       console.log("Renderer", renderer);
       console.log("PCB Design", pcbDesign);
       return;
     }
-    console.log("Refreshing simulation 2");
+    console.log("Actually refreshing simulation for real");
     console.log("Found pads:", drawAbleFootprintPads);
     console.log("Found segments:", drawAbleSegments);
 
-    await renderer.setCircles(renderCircles, renderSegments);
+    renderer.setCircles(renderCircles, renderSegments);
   }
 
   useEffect(() => {
@@ -419,15 +419,23 @@ export default function WosCanvas({
       viewTL: viewTL,
       viewSize: viewSize,
     });
-    console.log("Updated renderer");
+    // console.log("Updated renderer view", viewTL, viewSize);
   }, [renderer, viewTL, viewSize]);
+
+  useEffect(() => {
+    renderer?.updateParams({
+      viewRes: viewRes,
+    });
+    // console.log("Updated renderer res", viewRes);
+  }, [renderer, viewRes]);
 
   useEffect(() => {
     renderer?.updateParams({
       simTL: simTL,
       simSize: simSize,
     });
-    console.log("Updated renderer", simTL, simSize);
+    renderer?.resetSim();
+    console.log("Updated renderer sim", simTL, simSize);
   }, [renderer, simTL, simSize]);
 
   useEffect(() => {
@@ -435,13 +443,13 @@ export default function WosCanvas({
       boardTL: boardTL,
       boardSize: boardSize,
     });
-    console.log("Updated renderer", boardTL, boardSize);
+    console.log("Updated renderer board", boardTL, boardSize);
   }, [renderer, boardTL, boardSize]);
 
   useEffect(() => {
     refreshSimulation();
     console.log("Refreshed simulation");
-  }, [renderer, pcbDesign, simTL, simSize]);
+  }, [renderer, pcbDesign]);
 
   const updateTraceWidth = (width: number) => {
     setTraceWidth(width);
@@ -452,7 +460,8 @@ export default function WosCanvas({
       selectedSegment.width = width;
     }
     if (selectedPad || selectedSegment) {
-      refreshSimulation();
+      setPcbDesign(null);
+      setPcbDesign(pcbDesign);
     }
   };
 
@@ -483,7 +492,7 @@ export default function WosCanvas({
             position: "fixed",
             right: 32,
             top: 120,
-            fontSize: '0.95rem',
+            fontSize: "0.95rem",
           }}
           onClick={() => document.getElementById("kicad-file-input")?.click()}
         >
@@ -513,7 +522,7 @@ export default function WosCanvas({
             position: "fixed",
             right: 32,
             top: 170,
-            fontSize: '0.95rem',
+            fontSize: "0.95rem",
           }}
           onClick={() => {
             downloadFile(
@@ -730,6 +739,7 @@ export default function WosCanvas({
                 worldPos.y,
               ];
               const newSelectionEnd: [number, number] = [...newSelectionStart];
+
               setSelectionStart(newSelectionStart);
               setSelectionEnd(newSelectionEnd);
             }
@@ -773,6 +783,11 @@ export default function WosCanvas({
           }}
           onContextMenu={(e) => {
             e.preventDefault();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setEditorMode("select");
+            }
           }}
         />
       </div>
