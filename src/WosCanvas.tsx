@@ -257,6 +257,11 @@ export default function WosCanvas({
             maxStorageBuffersPerShaderStage: 10,
           },
         }));
+      if (!deviceRef.current) {
+        const h = document.querySelector("#title") as HTMLElement;
+        h.innerText = "Device is not available.";
+        return;
+      }
 
       console.log("Device", deviceRef.current);
 
@@ -382,7 +387,7 @@ export default function WosCanvas({
     console.log("Found pads:", drawAbleFootprintPads);
     console.log("Found segments:", drawAbleSegments);
 
-    await renderer.setCircles(renderCircles, renderSegments);
+    renderer.setCircles(renderCircles, renderSegments);
   }
 
   useEffect(() => {
@@ -419,7 +424,7 @@ export default function WosCanvas({
     renderer?.updateParams({
       viewRes: viewRes,
     });
-    // console.log("Updated renderer view", viewTL, viewSize);
+    // console.log("Updated renderer res", viewRes);
   }, [renderer, viewRes]);
 
   useEffect(() => {

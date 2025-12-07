@@ -3,12 +3,14 @@ import wosCompute from "/src/shaders/wosCompute.wgsl?raw";
 import wosRender from "/src/shaders/wosRender.wgsl?raw";
 
 import { example_circles, example_segments } from "./example_data";
+import { align } from "../utils/util";
 
 export interface Circle {
   center: [number, number];
   radius: number;
   boundary_value: number;
 }
+
 export interface Segment {
   start: [number, number];
   end: [number, number];
@@ -419,7 +421,7 @@ export class Renderer {
     this.lastFpsTime = performance.now();
   }
 
-  private async init() {
+  private init() {
     this.format = navigator.gpu.getPreferredCanvasFormat();
 
     this.context.configure({
@@ -427,10 +429,10 @@ export class Renderer {
       format: this.format,
     });
 
-    await this.setCircles();
+    this.setCircles();
   }
 
-  async updateParams({
+  updateParams({
     boardTL,
     boardSize,
     simRes,
@@ -451,52 +453,57 @@ export class Renderer {
     viewSize?: [number, number];
     simulationEnabled?: boolean;
   }) {
+    // console.log("updateParams", {
+    //   boardTL,
+    //   boardSize,
+    //   simRes,
+    //   simTL,
+    //   simSize,
+    //   viewRes,
+    //   viewTL,
+    //   viewSize,
+    //   simulationEnabled,
+    // });
     const device = this.device;
     const canvas = this.canvas;
     if (boardTL) {
       this.boardTL = boardTL;
-      const boardTLData = new Float32Array([this.boardTL[0], this.boardTL[1]]);
+      const boardTLData = new Float32Array(this.boardTL);
       device.queue.writeBuffer(this.boardTLBuffer, 0, boardTLData);
     }
     if (boardSize) {
       this.boardSize = boardSize;
-      const boardSizeData = new Float32Array([
-        this.boardSize[0],
-        this.boardSize[1],
-      ]);
+      const boardSizeData = new Float32Array(this.boardSize);
       device.queue.writeBuffer(this.boardSizeBuffer, 0, boardSizeData);
     }
     if (simRes) {
       this.simRes = simRes;
-      const simResData = new Uint32Array([this.simRes[0], this.simRes[1]]);
+      const simResData = new Uint32Array(this.simRes);
       device.queue.writeBuffer(this.simResBuffer, 0, simResData);
     }
     if (simTL) {
       this.simTL = simTL;
-      const simTLData = new Float32Array([this.simTL[0], this.simTL[1]]);
+      const simTLData = new Float32Array(this.simTL);
       device.queue.writeBuffer(this.simTLBuffer, 0, simTLData);
     }
     if (simSize) {
       this.simSize = simSize;
-      const simSizeData = new Float32Array([this.simSize[0], this.simSize[1]]);
+      const simSizeData = new Float32Array(this.simSize);
       device.queue.writeBuffer(this.simSizeBuffer, 0, simSizeData);
     }
     if (viewRes) {
       this.viewRes = viewRes;
-      const viewResData = new Uint32Array([this.viewRes[0], this.viewRes[1]]);
+      const viewResData = new Uint32Array(this.viewRes);
       device.queue.writeBuffer(this.viewResBuffer, 0, viewResData);
     }
     if (viewTL) {
       this.viewTL = viewTL;
-      const viewTLData = new Float32Array([this.viewTL[0], this.viewTL[1]]);
+      const viewTLData = new Float32Array(this.viewTL);
       device.queue.writeBuffer(this.viewTLBuffer, 0, viewTLData);
     }
     if (viewSize) {
       this.viewSize = viewSize;
-      const viewSizeData = new Float32Array([
-        this.viewSize[0],
-        this.viewSize[1],
-      ]);
+      const viewSizeData = new Float32Array(this.viewSize);
       device.queue.writeBuffer(this.viewSizeBuffer, 0, viewSizeData);
     }
     if (simulationEnabled !== undefined) {
@@ -557,7 +564,7 @@ export class Renderer {
     this.segmentGeomBuffer?.destroy();
     this.segmentGeomBuffer = this.device.createBuffer({
       label: "segment geo buffer",
-      size: segments.length * 6 * 4,
+      size: align(segments.length * 6 * 4, 16),
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
@@ -573,14 +580,14 @@ export class Renderer {
     this.bvhDirGeomsBuffer?.destroy();
     this.bvhDirGeomsBuffer = device.createBuffer({
       label: "bvh Dir geoms buffer",
-      size: BVH_Dir.geoms.byteLength,
+      size: align(BVH_Dir.geoms.byteLength, 16),
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
     this.bvhDirNodeBuffer?.destroy();
     this.bvhDirNodeBuffer = device.createBuffer({
       label: "bvh Dir node buffer",
-      size: BVH_Dir.nodes.byteLength,
+      size: align(BVH_Dir.nodes.byteLength, 16),
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
@@ -592,14 +599,14 @@ export class Renderer {
     this.bvhNeuGeomsBuffer?.destroy();
     this.bvhNeuGeomsBuffer = device.createBuffer({
       label: "bvh Neu geoms buffer",
-      size: BVH_Neu.geoms.byteLength,
+      size: align(BVH_Neu.geoms.byteLength, 16),
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
     this.bvhNeuNodeBuffer?.destroy();
     this.bvhNeuNodeBuffer = device.createBuffer({
       label: "bvh Neu node buffer",
-      size: BVH_Neu.nodes.byteLength,
+      size: align(BVH_Neu.nodes.byteLength, 16),
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
@@ -624,7 +631,7 @@ export class Renderer {
     this.simResBuffer?.destroy();
     this.simResBuffer = device.createBuffer({
       label: "Sim Res Buffer",
-      size: 8,
+      size: 16, // 16 Byte Alignment
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -634,7 +641,7 @@ export class Renderer {
     this.simTLBuffer?.destroy();
     this.simTLBuffer = device.createBuffer({
       label: "Sim TL Buffer",
-      size: 8,
+      size: 16, // 16 Byte Alignment
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -644,7 +651,7 @@ export class Renderer {
     this.simSizeBuffer?.destroy();
     this.simSizeBuffer = device.createBuffer({
       label: "Sim Size Buffer",
-      size: 8,
+      size: 16, // 16 Byte Alignment
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -658,7 +665,7 @@ export class Renderer {
     this.boardTLBuffer?.destroy();
     this.boardTLBuffer = device.createBuffer({
       label: "Board TL Buffer",
-      size: 8,
+      size: 16, // 16 Byte Alignment
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -668,7 +675,7 @@ export class Renderer {
     this.boardSizeBuffer?.destroy();
     this.boardSizeBuffer = device.createBuffer({
       label: "Board Size Buffer",
-      size: 8,
+      size: 16, // 16 Byte Alignment
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -714,7 +721,7 @@ export class Renderer {
     this.uvBuffer?.destroy();
     this.uvBuffer = this.device.createBuffer({
       label: "uv buffer",
-      size: this.simRes[0] * this.simRes[1] * 8,
+      size: align(this.simRes[0] * this.simRes[1] * 8, 16),
       usage:
         GPUBufferUsage.STORAGE |
         GPUBufferUsage.COPY_DST |
@@ -737,7 +744,7 @@ export class Renderer {
     this.walkCountBuffer?.destroy();
     this.walkCountBuffer = this.device.createBuffer({
       label: "Walk Count Buffer",
-      size: 4,
+      size: 16, // 16 Byte Alignment
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
   }
@@ -747,7 +754,7 @@ export class Renderer {
     this.wosValuesBuffer?.destroy();
     this.wosValuesBuffer = device.createBuffer({
       label: "wos values buffer",
-      size: this.simRes[0] * this.simRes[1] * 4,
+      size: align(this.simRes[0] * this.simRes[1] * 4, 16),
       usage:
         GPUBufferUsage.STORAGE |
         GPUBufferUsage.COPY_DST |
@@ -822,7 +829,7 @@ export class Renderer {
     this.viewResBuffer?.destroy();
     this.viewResBuffer = device.createBuffer({
       label: "View Res Buffer",
-      size: 8,
+      size: 16, // 16 Byte Alignment
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -833,7 +840,7 @@ export class Renderer {
     this.viewTLBuffer?.destroy();
     this.viewTLBuffer = device.createBuffer({
       label: "View TL Buffer",
-      size: 8,
+      size: 16, // 16 Byte Alignment
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -844,7 +851,7 @@ export class Renderer {
     this.viewSizeBuffer?.destroy();
     this.viewSizeBuffer = device.createBuffer({
       label: "View Size Buffer",
-      size: 8,
+      size: 16, // 16 Byte Alignment
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -858,7 +865,7 @@ export class Renderer {
     this.minMaxBValsBuffer?.destroy();
     this.minMaxBValsBuffer = device.createBuffer({
       label: "min max bval buffer",
-      size: 8,
+      size: 16, // 16 Byte Alignment
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -897,7 +904,7 @@ export class Renderer {
     });
   }
 
-  async setCircles(
+  setCircles(
     circles: Circle[] = example_circles,
     segments: Segment[] = example_segments
   ) {
