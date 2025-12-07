@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useMemo } from "react";
 import { assert, makeRegexFromWildcardString } from "./utils/util";
 
 import {
@@ -64,9 +64,6 @@ export default function WosCanvas({
   ];
   const [viewTL, setViewTL] = useState<[number, number]>(simTL); // floats, world space
   const [viewSize, setViewSize] = useState<[number, number]>(simSize); // floats, world space
-
-  // const [boardTL, setBoardTL] = useState<[number, number]>(); // floats, world space
-  // const [boardSize, setBoardSize] = useState<[number, number]>(); // floats, world space
 
   const [renderer, setRenderer] = useState<Renderer | null>(null);
 
@@ -292,36 +289,49 @@ export default function WosCanvas({
     })();
   }, [webgpuCanvasRef.current, uiCanvasRef.current]);
 
-  const edgeCutSegments = pcbDesign?.graphicLines.filter((line) => {
-    return line.layer?.names.some((layer) => {
-      return makeRegexFromWildcardString(layer).test("Edge.Cuts");
+  const edgeCutSegments = useMemo(() => {
+    console.log("edge cut segments updated");
+    return pcbDesign?.graphicLines.filter((line) => {
+      return line.layer?.names.some((layer) => {
+        return makeRegexFromWildcardString(layer).test("Edge.Cuts");
+      });
     });
-  });
+  }, [pcbDesign]);
 
-  const boardTL: [number, number] = edgeCutSegments?.reduce(
-    (acc, line) => {
-      return [
-        Math.min(acc[0], line.startPoint?.x || Number.POSITIVE_INFINITY),
-        Math.min(acc[1], line.startPoint?.y || Number.POSITIVE_INFINITY),
-      ];
-    },
-    [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY]
-  ) ?? [120, 90];
+  const boardTL: [number, number] = useMemo(() => {
+    console.log("boardTL updated");
+    return (
+      edgeCutSegments?.reduce(
+        (acc, line) => {
+          return [
+            Math.min(acc[0], line.startPoint?.x || Number.POSITIVE_INFINITY),
+            Math.min(acc[1], line.startPoint?.y || Number.POSITIVE_INFINITY),
+          ];
+        },
+        [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY]
+      ) ?? [120, 90]
+    );
+  }, [edgeCutSegments]);
 
-  const boardBR: [number, number] = edgeCutSegments?.reduce(
-    (acc, line) => {
-      return [
-        Math.max(acc[0], line.endPoint?.x || Number.NEGATIVE_INFINITY),
-        Math.max(acc[1], line.endPoint?.y || Number.NEGATIVE_INFINITY),
-      ];
-    },
-    [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY]
-  ) ?? [180, 150];
+  const boardBR: [number, number] = useMemo(() => {
+    console.log("boardBR updated");
+    return (
+      edgeCutSegments?.reduce(
+        (acc, line) => {
+          return [
+            Math.max(acc[0], line.endPoint?.x || Number.NEGATIVE_INFINITY),
+            Math.max(acc[1], line.endPoint?.y || Number.NEGATIVE_INFINITY),
+          ];
+        },
+        [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY]
+      ) ?? [180, 150]
+    );
+  }, [edgeCutSegments]);
 
-  const boardSize: [number, number] = [
-    boardBR[0] - boardTL[0],
-    boardBR[1] - boardTL[1],
-  ];
+  const boardSize: [number, number] = useMemo(() => {
+    console.log("boardSize updated");
+    return [boardBR[0] - boardTL[0], boardBR[1] - boardTL[1]];
+  }, [boardBR, boardTL]);
 
   const drawAbleFootprintPads =
     pcbDesign?.footprints.flatMap((footprint) => {
@@ -408,7 +418,7 @@ export default function WosCanvas({
       viewTL: viewTL,
       viewSize: viewSize,
     });
-    console.log("Updated renderer");
+    console.log("Updated renderer view", viewTL, viewSize);
   }, [renderer, viewTL, viewSize]);
 
   useEffect(() => {
@@ -416,7 +426,7 @@ export default function WosCanvas({
       simTL: simTL,
       simSize: simSize,
     });
-    console.log("Updated renderer", simTL, simSize);
+    console.log("Updated renderer sim", simTL, simSize);
   }, [renderer, simTL, simSize]);
 
   useEffect(() => {
@@ -424,7 +434,7 @@ export default function WosCanvas({
       boardTL: boardTL,
       boardSize: boardSize,
     });
-    console.log("Updated renderer", boardTL, boardSize);
+    console.log("Updated renderer board", boardTL, boardSize);
   }, [renderer, boardTL, boardSize]);
 
   useEffect(() => {
