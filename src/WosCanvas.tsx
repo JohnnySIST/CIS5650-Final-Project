@@ -1,5 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
+import Button from "@mui/material/Button";
 import { assert, makeRegexFromWildcardString } from "./utils/util";
+import TraceWidthSlider from "./ui/TraceWidthSlider";
 
 import {
   Circle as RenderCircle,
@@ -456,44 +458,37 @@ export default function WosCanvas({
 
   return (
     <>
+      <div style={{ position: "absolute", top: 24, right: 12, zIndex: 2000 }}>
+        <TraceWidthSlider
+          value={traceWidth}
+          min={1}
+          max={50}
+          onChange={updateTraceWidth}
+        />
+      </div>
       <div
         id="controls"
-        style={{ position: "absolute", top: 0, left: 0, zIndex: 1000 }}
+        style={{
+          position: "absolute",
+          top: 20,
+          left: 24,
+          zIndex: 1000,
+        }}
       >
-        <div
-          id="trace-controls"
-          style={{
-            display: "inline-block",
-            marginLeft: "10px",
-            verticalAlign: "middle",
-          }}
-        >
-          <label htmlFor="trace-width-slider">Trace Width:</label>
-          <input
-            type="range"
-            id="trace-width-slider"
-            min={1}
-            max={50}
-            value={traceWidth}
-            style={{ verticalAlign: "middle" }}
-            onChange={(e) => updateTraceWidth(Number(e.target.value))}
-          />
-          <input
-            type="number"
-            id="trace-width-input"
-            min={1}
-            max={50}
-            value={traceWidth}
-            style={{ width: "50px", verticalAlign: "middle" }}
-            onChange={(e) => updateTraceWidth(Number(e.target.value))}
-          />
-        </div>
-        <button
+        <Button
           id="import-kicad-btn"
+          variant="contained"
+          color="primary"
+          sx={{
+            position: "fixed",
+            right: 32,
+            top: 120,
+            fontSize: '0.95rem',
+          }}
           onClick={() => document.getElementById("kicad-file-input")?.click()}
         >
           Import KiCad PCB
-        </button>
+        </Button>
         <input
           type="file"
           id="kicad-file-input"
@@ -510,9 +505,16 @@ export default function WosCanvas({
             }
           }}
         />
-
-        <button
+        <Button
           id="export-kicad-btn"
+          variant="contained"
+          color="primary"
+          sx={{
+            position: "fixed",
+            right: 32,
+            top: 170,
+            fontSize: '0.95rem',
+          }}
           onClick={() => {
             downloadFile(
               pcbDesign?.getString() || "",
@@ -522,7 +524,7 @@ export default function WosCanvas({
           }}
         >
           Export to KiCad
-        </button>
+        </Button>
       </div>
       <div
         style={{

@@ -10,9 +10,9 @@ const FpsBadge: React.FC<FpsBadgeProps> = ({ fps }) => (
   <Box
     sx={{
       position: "fixed",
-      right: 24,
       top: 24,
-      zIndex: 1000,
+      left: 24,
+      zIndex: 2000,
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
