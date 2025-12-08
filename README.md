@@ -64,9 +64,9 @@ The main user interaction feature is being able to select, add/delete, and move 
 
 The user can also choose which layer of the board they would like to modify and simulate. Modern PCB designs contain many layers, and it is important to be able to simulate any of them. Below is an example of this with the KiCad `kit-dev-coldfire-xilinx_5213` demo project:
 
-|                FCu Layer                 |                 In1Cu Layer                  |                 In2Cu Layer                  |
-| :--------------------------------------: | :------------------------------------------: | :------------------------------------------: |
-| ![FCu Layer](img\BigWostr_Layer-FCu.png) | ![In1Cu Layer](img\BigWostr_Layer-In1Cu.png) | ![In2Cu Layer](img\BigWostr_Layer-In2Cu.png) |
+|                 FCu Layer                  |                  In1Cu Layer                   |                  In2Cu Layer                   |
+| :----------------------------------------: | :--------------------------------------------: | :--------------------------------------------: |
+| ![FCu Layer](./img/BigWostr_Layer-FCu.png) | ![In1Cu Layer](./img/BigWostr_Layer-In1Cu.png) | ![In2Cu Layer](./img/BigWostr_Layer-In2Cu.png) |
 
 Finally, for some quality of life features, we implemented a basic camera system for navigating the board, a live FPS display for performance monitoring, a pause button for the simulation, and a selection menu for adjusting simulation resolution.
 
