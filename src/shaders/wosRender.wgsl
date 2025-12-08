@@ -72,28 +72,29 @@ fn fragMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     if temp == -1.0 {
         return vec4f(0.0, 0.0, 0.0, 1.0);
     } else {
-        let avgTemp = (temp / f32(totalWalks) + 0.35); // +0.35 to offset color pallet
+        let avgTemp = (temp / f32(totalWalks)); // +0.35 to offset color pallet
         // APROXIMATELY REMAP TO 0-1 RANGE
         // MAX IS THE MAX BOUNDARY VALUE, WHICH CAN BE EXCEEDED IN WOSTR
-        let normalizedTemp = (avgTemp - minMaxBVals.x) / (minMaxBVals.y - minMaxBVals.x);
+        let normalizedTemp = (avgTemp - minMaxBVals.x) / (minMaxBVals.y - minMaxBVals.x) + 0.35;
 
         // DIFFERENT COLOR PALLETS :)
         //let outColor = twoToneColor(temp / f32(totalWalks));
-        // let outColor = color(
-        //     vec3f(0.5, 0.5, 0.5),
-        //     vec3f(0.5, 0.5, 0.5),
-        //     vec3f(1.0, 1.0, 1.0),
-        //     vec3f(0.00, 0.33, 0.67),
-        //     normalizedTemp
-        // );
-
+        
         let outColor = color(
-            vec3f(0.300, 0.500, 0.700),  // a
-            vec3f(0.700, 0.500, 0.300),  // b
-            vec3f(1.000, 1.000, 1.000),  // c
-            vec3f(0.000, 0.150, 0.350),  // d
+            vec3f(0.5, 0.5, 0.5),
+            vec3f(0.5, 0.5, 0.5),
+            vec3f(1.0, 1.0, 1.0),
+            vec3f(0.00, 0.33, 0.67),
             normalizedTemp
         );
+
+        // let outColor = color(
+        //     vec3f(0.300, 0.500, 0.700),  // a
+        //     vec3f(0.700, 0.500, 0.300),  // b
+        //     vec3f(1.000, 1.000, 1.000),  // c
+        //     vec3f(0.000, 0.150, 0.350),  // d
+        //     normalizedTemp
+        // );
 
         // let outColor = color(
         //     vec3f(0.500, 0.000, 0.500),  // a
