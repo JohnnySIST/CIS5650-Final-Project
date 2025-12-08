@@ -19,6 +19,8 @@ import {
   Segment,
   Footprint,
   PadLayers,
+  SegmentStart,
+  Layer,
 } from "kicadts";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
@@ -1016,14 +1018,21 @@ export default function WosCanvas({
                 if (!addSegmentStart) {
                   setAddSegmentStart([clickPos.x, clickPos.y]);
                 } else {
-                  // const newSegment = new Segment( {
-                  //   start: addSegmentStart,
-                  //   end: [clickPos.x, clickPos.y],
-                  //   widthRadius: 1,
-                  //   boundary_value: Math.random(),
-                  //   boundary_type: BoundaryType.NEUMANN,
-                  // });
-                  // setTargetSegments((prev) => [...prev, newSegment]);
+                  const newSegment = new Segment({
+                    start: new SegmentStart(
+                      addSegmentStart[0],
+                      addSegmentStart[1]
+                    ),
+                    end: new SegmentStart(clickPos.x, clickPos.y),
+                    width: 1,
+                    layer: new Layer([targetLayer]),
+                  });
+                  const boundarySegment = makeSegmentBoundary(
+                    newSegment,
+                    Math.random(),
+                    BoundaryType.NEUMANN
+                  );
+                  setTargetSegments((prev) => [...prev, boundarySegment]);
                   setAddSegmentStart(null);
                   setEditorMode("select");
                   setReactDummyVariableRender((prev) => prev + 1);
