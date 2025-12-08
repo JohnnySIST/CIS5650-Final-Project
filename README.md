@@ -38,11 +38,13 @@ The general pipeline involves two main compute shaders. First, we do an initial 
 ## Interactivity
 A unique advantage of this WoStr method, is that because it is based only on a set of initial query points, we don't need to do a global solve to get results. To take advantage of this, we implemented a simulation zone selection feature that lets users focus computation on a specific region of interest. For complex boards, or if there is a specific area you are particularly interested in, you can easily simulate just on that area in a higher resolution, without paying for the cost of simulating the entire board.
 
+![Sim Domain Render](./img/BoundaryLines_V1.png)
+
 The main user interaction feature is being able to select, add/delete, and move geometry as well as change the boundary types and values as needed. This allows for custom board creation or user imported boards to be edited and adjusted. The final configuration can then be exported out. 
 
 Finally, for some quality of life features, we implemented a basic camera system for navigating the board, a live FPS display for performance monitoring, a pause button for the simulation, and a selection menue for adjusting simulation resolution.
 
-![Interactive Visualization demo](./Milestone_2/camera.gif)
+[Interactive Visualization demo](./img/UI_DemoVid_V1.mp4)
 
 ## KiCad Integration
 
