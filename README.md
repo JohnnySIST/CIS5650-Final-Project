@@ -37,7 +37,7 @@ The general pipeline involves two main compute shaders. First, we do an initial 
 
 ## Interactivity
 
-Here's a quick demo of the user interaction features we implemented:
+Here is the layout of the UI:
 
 ![interaction](img/interaction.png)
 
@@ -60,6 +60,8 @@ The main user interaction feature is being able to select, add/delete, and move 
 The main user interaction feature is being able to select, add/delete, and move geometry as well as change the boundary types and values as needed. This allows for custom board creation or user imported boards to be edited and adjusted. The final configuration can then be exported out.
 
 Finally, for some quality of life features, we implemented a basic camera system for navigating the board, a live FPS display for performance monitoring, a pause button for the simulation, and a selection menu for adjusting simulation resolution.
+
+Here is a demo video of the tool in action.
 
 [![Demo Video](https://img.youtube.com/vi/hk4TR0w7xXk/maxresdefault.jpg)](https://www.youtube.com/watch?v=hk4TR0w7xXk)
 
