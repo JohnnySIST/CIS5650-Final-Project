@@ -47,6 +47,17 @@ type BoundarySegment = Segment & BoundaryInfo;
 type BoundaryPad = FootprintPad & BoundaryInfo;
 type BoundaryFootprint = Omit<Footprint, "fpPads"> & { fpPads: BoundaryPad[] };
 
+type BoundaryPadFullRef = [BoundaryPad, BoundaryFootprint];
+
+function getFullPosition(padFullRef: BoundaryPadFullRef) {
+  const pad = padFullRef[0];
+  const footprint = padFullRef[1];
+  return {
+    x: (footprint.position?.x || 0) + (pad.at?.x || 0), // TODO: Apply rotation
+    y: (footprint.position?.y || 0) + (pad.at?.y || 0),
+  };
+}
+
 export default function WosCanvas({
   fpsCallback,
   simulationEnabled,
@@ -84,9 +95,17 @@ export default function WosCanvas({
     []
   );
 
-  const [selectedPad, setSelectedPad] = useState<BoundaryPad | null>(null);
+  const [selectedPad, setSelectedPad] = useState<BoundaryPadFullRef | null>(
+    null
+  );
   const [selectedSegment, setSelectedSegment] =
     useState<BoundarySegment | null>(null);
+
+  const [mouseDownSelectedPad, setMouseDownSelectedPad] =
+    useState<BoundaryPadFullRef | null>(null);
+  const [mouseDownSelectedSegment, setMouseDownSelectedSegment] =
+    useState<BoundarySegment | null>(null);
+
   const [targetLayer, setTargetLayer] = useState("B.Cu");
 
   const edgeCutSegments = useMemo(() => {
@@ -136,7 +155,7 @@ export default function WosCanvas({
   const [simRes, setSimRes] = useState<[number, number]>(
     webgpuCanvasRef.current
       ? [webgpuCanvasRef.current.width, webgpuCanvasRef.current.height]
-      : [1920, 1080]
+      : [720, 480]
   ); // integers, pixels
   const [simTL, setSimTL] = useState<[number, number]>([...boardTL]); // floats, world space
   const [simSize, setSimSize] = useState<[number, number]>([...boardSize]); // floats, world space
@@ -209,6 +228,14 @@ export default function WosCanvas({
     const canvasU = x / viewSize[0];
     const canvasV = y / viewSize[1];
     return { u: canvasU, v: canvasV };
+  }
+
+  function scaleWorldPositionToCanvasPosition(
+    x: number,
+    y: number
+  ): { x: number; y: number } {
+    const { u, v } = scaleWorldPositionToCanvasUV(x, y);
+    return scaleCanvasUVToCanvasPosition(u, v);
   }
 
   function getCanvasUVFromEvent(e: MouseEvent): { u: number; v: number } {
@@ -390,8 +417,7 @@ export default function WosCanvas({
         })
         .map((pad) => {
           return {
-            x: (footprint.position?.x || 0) + (pad.at?.x || 0), // TODO: Apply rotation
-            y: (footprint.position?.y || 0) + (pad.at?.y || 0),
+            ...getFullPosition([pad, footprint]),
             radius: (pad.size?.width || 0) / 2,
             boundary_value: pad.boundaryValue,
             boundary_type: pad.boundaryType,
@@ -443,6 +469,49 @@ export default function WosCanvas({
     rendererRef.current.updateGeometry(renderCircles, renderSegments);
   }
 
+  function getPadsAtPosition(pos: {
+    x: number;
+    y: number;
+  }): BoundaryPadFullRef[] {
+    return targetFootprints.flatMap((footprint) => {
+      return (
+        footprint.fpPads
+          .filter((pad) => {
+            return (
+              (pad.shape === "circle" || pad.shape === "oval") &&
+              pad.layers?.layers.some((layer) => {
+                return makeRegexFromWildcardString(layer).test(targetLayer);
+              })
+            );
+          })
+          .filter((pad) => {
+            const center = getFullPosition([pad, footprint]);
+            const dist = Math.sqrt(
+              (center.x - pos.x) ** 2 + (center.y - pos.y) ** 2
+            );
+            return dist < (pad.size?.height || 0) / 2;
+          })
+          .map((pad) => [pad, footprint] satisfies BoundaryPadFullRef) ?? []
+      );
+    });
+  }
+
+  function getSegmentsAtPosition(pos: { x: number; y: number }) {
+    return targetSegments
+      .filter((segment) => {
+        return segment.layer?.names.some((layer) => {
+          return makeRegexFromWildcardString(layer).test(targetLayer);
+        });
+      })
+      .filter((segment) => {
+        if (!segment || !segment.end || !segment.start || !segment.width) {
+          return false;
+        }
+        const dist = distanceToLineSegment(pos, segment.start, segment.end);
+        return dist < segment.width / 2;
+      });
+  }
+
   useEffect(() => {
     if (!uiCanvasRef.current) return;
     const ctx = uiCanvasRef.current.getContext("2d");
@@ -451,6 +520,7 @@ export default function WosCanvas({
     if (isSelecting && selectionStart && selectionEnd) {
       const p1 = getCanvasPositionFromWorldPosition(...selectionStart);
       const p2 = getCanvasPositionFromWorldPosition(...selectionEnd);
+
       ctx.save();
       ctx.strokeStyle = "rgba(0,128,255,0.6)";
       ctx.lineWidth = 2;
@@ -463,7 +533,71 @@ export default function WosCanvas({
       );
       ctx.restore();
     }
-  }, [uiCanvasRef.current, selectionStart, selectionEnd, isSelecting]);
+
+    if (selectedPad) {
+    }
+
+    if (
+      selectedSegment &&
+      selectedSegment.startPoint &&
+      selectedSegment.endPoint &&
+      selectedSegment.width
+    ) {
+      const p1 = getCanvasPositionFromWorldPosition(
+        selectedSegment.startPoint.x,
+        selectedSegment.startPoint.y
+      );
+      const p2 = getCanvasPositionFromWorldPosition(
+        selectedSegment.endPoint.x,
+        selectedSegment.endPoint.y
+      );
+      const canvasWidth = scaleWorldPositionToCanvasPosition(
+        selectedSegment.width,
+        0
+      ).x;
+      ctx.save();
+      ctx.strokeStyle = "rgba(0,128,255,0.6)";
+      ctx.lineWidth = canvasWidth;
+      const circleR = 0.001;
+      ctx.beginPath();
+      ctx.moveTo(p1.x + circleR, p1.y);
+      ctx.arc(p1.x, p1.y, circleR, 0, Math.PI * 2);
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.moveTo(p2.x + circleR, p2.y);
+      ctx.arc(p2.x, p2.y, circleR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (selectedPad) {
+      const padPos = getFullPosition(selectedPad);
+      const center = getCanvasPositionFromWorldPosition(padPos.x, padPos.y);
+      const width = scaleWorldPositionToCanvasPosition(
+        selectedPad[0].size?.width || 0,
+        0
+      ).x;
+      const circleR = 0.001;
+      ctx.save();
+      ctx.strokeStyle = "rgba(0,128,255,0.6)";
+      ctx.lineWidth = width;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(center.x + circleR, center.y);
+      ctx.arc(center.x, center.y, circleR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }, [
+    uiCanvasRef.current,
+    selectionStart,
+    selectionEnd,
+    isSelecting,
+    selectedPad,
+    selectedSegment,
+    viewTL,
+    viewSize,
+    reactDummyVariable,
+  ]);
 
   useEffect(() => {
     rendererRef.current?.updateParams({
@@ -517,13 +651,13 @@ export default function WosCanvas({
   const updateTraceWidth = (width: number) => {
     setTraceWidth(width);
     if (selectedPad) {
-      if (!selectedPad.size) {
-        selectedPad.size = {
+      if (!selectedPad[0].size) {
+        selectedPad[0].size = {
           width: width,
           height: width,
         };
       } else {
-        selectedPad.size.width = width;
+        selectedPad[0].size.width = width;
       }
       console.log("Updated selected pad", selectedPad);
     }
@@ -701,7 +835,7 @@ export default function WosCanvas({
               <div style={{ marginBottom: selectedSegment ? "8px" : "0" }}>
                 <strong>Selected Pad</strong>
                 <br />
-                Width: {selectedPad.size?.width.toFixed(3) ?? "N/A"}
+                Width: {selectedPad[0].size?.width.toFixed(3) ?? "N/A"}
               </div>
             )}
             {selectedSegment && (
@@ -717,14 +851,14 @@ export default function WosCanvas({
               <Select
                 labelId="boundary-type-label"
                 value={
-                  selectedPad?.boundaryType ??
+                  selectedPad?.[0].boundaryType ??
                   selectedSegment?.boundaryType ??
                   BoundaryType.DIRICHILET
                 }
                 label="Boundary Type"
                 onChange={(e) => {
                   const newVal = e.target.value as BoundaryType;
-                  if (selectedPad) selectedPad.boundaryType = newVal;
+                  if (selectedPad) selectedPad[0].boundaryType = newVal;
                   if (selectedSegment) selectedSegment.boundaryType = newVal;
                   setReactDummyVariable((prev) => prev + 1);
                 }}
@@ -740,13 +874,13 @@ export default function WosCanvas({
               size="small"
               fullWidth
               value={
-                selectedPad?.boundaryValue ??
+                selectedPad?.[0].boundaryValue ??
                 selectedSegment?.boundaryValue ??
                 0
               }
               onChange={(e) => {
                 const newVal = parseFloat(e.target.value);
-                if (selectedPad) selectedPad.boundaryValue = newVal;
+                if (selectedPad) selectedPad[0].boundaryValue = newVal;
                 if (selectedSegment) selectedSegment.boundaryValue = newVal;
                 setReactDummyVariable((prev) => prev + 1);
               }}
@@ -784,76 +918,6 @@ export default function WosCanvas({
             top: 0,
             zIndex: 2,
           }}
-          onClick={(e) => {
-            const clickPos = getMouseWorldPosition(e.nativeEvent);
-            switch (editorMode) {
-              case "select":
-                if (!pcbDesign) {
-                  return;
-                }
-                const drawAbleFootprintPads = targetFootprints.flatMap(
-                  (footprint) => {
-                    return (
-                      footprint.fpPads
-                        .filter((pad) => {
-                          return (
-                            (pad.shape === "circle" || pad.shape === "oval") &&
-                            pad.layers?.layers.some((layer) => {
-                              return makeRegexFromWildcardString(layer).test(
-                                targetLayer
-                              );
-                            })
-                          );
-                        })
-                        .find((pad) => {
-                          const centerX =
-                            (footprint.position?.x || 0) + (pad.at?.x || 0);
-                          const centerY =
-                            (footprint.position?.y || 0) + (pad.at?.y || 0);
-                          const dist = Math.sqrt(
-                            (centerX - clickPos.x) ** 2 +
-                              (centerY - clickPos.y) ** 2
-                          );
-                          return dist < (pad.size?.height || 0) / 2;
-                        }) ?? []
-                    );
-                  }
-                );
-                console.log(
-                  "drawAbleFootprintPads for selection",
-                  drawAbleFootprintPads
-                );
-                setSelectedPad(drawAbleFootprintPads[0] ?? null);
-
-                setSelectedSegment(
-                  targetSegments
-                    .filter((segment) => {
-                      return segment.layer?.names.some((layer) => {
-                        return makeRegexFromWildcardString(layer).test(
-                          targetLayer
-                        );
-                      });
-                    })
-                    .find((segment) => {
-                      if (
-                        !segment ||
-                        !segment.end ||
-                        !segment.start ||
-                        !segment.width
-                      ) {
-                        return false;
-                      }
-                      const dist = distanceToLineSegment(
-                        clickPos,
-                        segment.start,
-                        segment.end
-                      );
-                      return dist < segment.width / 2;
-                    }) ?? null
-                );
-                break;
-            }
-          }}
           onWheel={(e) => {
             const worldPosBeforeZoom = getMouseWorldPosition(e.nativeEvent);
 
@@ -869,10 +933,11 @@ export default function WosCanvas({
               zoomMinClamp,
               Math.min(newViewSize[0], zoomMaxClamp)
             );
-            newViewSize[1] = Math.max(
-              zoomMinClamp,
-              Math.min(newViewSize[1], zoomMaxClamp)
-            );
+            // newViewSize[1] = Math.max(
+            //   zoomMinClamp,
+            //   Math.min(newViewSize[1], zoomMaxClamp)
+            // );
+            newViewSize[1] = (newViewSize[0] / viewRes[0]) * viewRes[1];
             setViewSize(newViewSize);
 
             const worldPosAfterZoom = getMouseWorldPosition(
@@ -928,8 +993,15 @@ export default function WosCanvas({
               if (!uiCanvasRef.current) {
                 return;
               }
-              setIsSelecting(true);
+
               const worldPos = getMouseWorldPosition(e.nativeEvent);
+
+              setMouseDownSelectedPad(getPadsAtPosition(worldPos)[0] ?? null);
+              setMouseDownSelectedSegment(
+                getSegmentsAtPosition(worldPos)[0] ?? null
+              );
+
+              setIsSelecting(true);
               const newSelectionStart: [number, number] = [
                 worldPos.x,
                 worldPos.y,
@@ -965,8 +1037,13 @@ export default function WosCanvas({
                   height
                 );
                 if (canvasUVArea.u < 0.01 || canvasUVArea.v < 0.01) {
-                  setSimTL(boardTL);
-                  setSimSize(boardSize);
+                  if (mouseDownSelectedPad || mouseDownSelectedSegment) {
+                    setSelectedPad(mouseDownSelectedPad);
+                    setSelectedSegment(mouseDownSelectedSegment);
+                  } else {
+                    setSimTL(boardTL);
+                    setSimSize(boardSize);
+                  }
                 } else {
                   setSimTL([minX, minY]);
                   setSimSize([width, height]);
