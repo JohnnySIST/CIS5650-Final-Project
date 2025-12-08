@@ -36,6 +36,20 @@ The original papers, as well as many extentions, can be found here: [https://roh
 The general pipeline involves two main compute shaders. First, we do an initial screening of our simulation domain to get just the query points within the boundaries of our geometry. This can be done once before the simulation starts and allows us to only simulate on point's that will actually result in meaning full data. These query points are then shipped to the second compute shader where the real work happens. This second compute shader handles the actuall simulation. For each query point, we send out these random walks, stepping based on the closest distance to a boundary. This closest distance is found using a BVH struture (or in this case BAH structure since we are in 2D), which drastically speeds up walk times, especially in complex boards. As explained in the WoStr method, at Neumann boundaries, this walk get reflected, picking up some flux value, and at Dirichlet boundarie's, the walk ends and returns the Dirichlet boundary value along with any accumulated flux along the walk. These results then get sent to a final fragment shader, which averages all the walk results for each query point, fits that value through a simple color ramp, and draws it to the screen along with the boundary geometry. 
 
 ## Interactivity
+
+Here's a quick demo of the user interaction features we implemented:
+
+![interaction](img/interaction.png)
+
+Major features include:
+- Import and export as KiCad PCB formats
+- Simulation zone selection
+- Change simulation resolution
+- Geometry selection, addition/deletion and alteration
+- Zooming, panning camera controls
+- Toggle simulation on/off
+- Live FPS display
+
 A unique advantage of this WoStr method, is that because it is based only on a set of initial query points, we don't need to do a global solve to get results. To take advantage of this, we implemented a simulation zone selection feature that lets users focus computation on a specific region of interest. For complex boards, or if there is a specific area you are particularly interested in, you can easily simulate just on that area in a higher resolution, without paying for the cost of simulating the entire board.
 
 <p align="center">
@@ -43,8 +57,9 @@ A unique advantage of this WoStr method, is that because it is based only on a s
 </p>
 
 The main user interaction feature is being able to select, add/delete, and move geometry as well as change the boundary types and values as needed. This allows for custom board creation or user imported boards to be edited and adjusted. The final configuration can then be exported out. 
+The main user interaction feature is being able to select, add/delete, and move geometry as well as change the boundary types and values as needed. This allows for custom board creation or user imported boards to be edited and adjusted. The final configuration can then be exported out.
 
-Finally, for some quality of life features, we implemented a basic camera system for navigating the board, a live FPS display for performance monitoring, a pause button for the simulation, and a selection menue for adjusting simulation resolution.
+Finally, for some quality of life features, we implemented a basic camera system for navigating the board, a live FPS display for performance monitoring, a pause button for the simulation, and a selection menu for adjusting simulation resolution.
 
 [![Demo Video](https://img.youtube.com/vi/hk4TR0w7xXk/maxresdefault.jpg)](https://www.youtube.com/watch?v=hk4TR0w7xXk)
 
