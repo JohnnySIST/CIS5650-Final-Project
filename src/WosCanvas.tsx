@@ -36,7 +36,7 @@ function downloadFile(content: string, fileName: string, contentType: string) {
 }
 
 type Vec2 = { x: number; y: number };
-type EditorMode = "select";
+type EditorMode = "select" | "add-circle" | "add-segment";
 
 type BoundaryInfo = {
   boundaryValue: number;
@@ -89,7 +89,9 @@ export default function WosCanvas({
 
   const [pcbDesign, setPcbDesign] = useState<KicadPcb | null>(null);
 
-  const targetPads: FootprintPad[] = [];
+  const [addSegmentStart, setAddSegmentStart] = useState<
+    [number, number] | null
+  >(null);
 
   const [targetSegments, setTargetSegments] = useState<BoundarySegment[]>([]);
   const [targetFootprints, setTargetFootprints] = useState<BoundaryFootprint[]>(
@@ -704,6 +706,41 @@ export default function WosCanvas({
         }}
       >
         <Button
+          id="add-circle-btn"
+          variant="contained"
+          color="primary"
+          sx={{
+            position: "fixed",
+            right: 170,
+            top: 70,
+            fontSize: "0.95rem",
+          }}
+          onClick={() =>
+            setEditorMode(editorMode === "add-circle" ? "select" : "add-circle")
+          }
+        >
+          {editorMode === "add-circle" ? "Click to Add Circle" : "Add Circle"}
+        </Button>
+        <Button
+          id="add-segment-btn"
+          variant="contained"
+          color="primary"
+          sx={{
+            position: "fixed",
+            right: 170,
+            top: 120,
+            fontSize: "0.95rem",
+          }}
+          onClick={() => {
+            setEditorMode(
+              editorMode === "add-segment" ? "select" : "add-segment"
+            );
+            setAddSegmentStart(null);
+          }}
+        >
+          {editorMode === "add-segment" ? "Click to Add Seg" : "Add Segment"}
+        </Button>
+        <Button
           id="import-kicad-btn"
           variant="contained"
           color="primary"
@@ -920,6 +957,42 @@ export default function WosCanvas({
             left: 0,
             top: 0,
             zIndex: 2,
+          }}
+          onClick={(e) => {
+            const clickPos = getMouseWorldPosition(e.nativeEvent);
+            switch (editorMode) {
+              case "add-circle": {
+                const newCircle: RenderCircle = {
+                  center: [clickPos.x, clickPos.y],
+                  radius: 1,
+                  boundary_value: Math.random(),
+                  boundary_type: BoundaryType.DIRICHILET,
+                };
+                // targetFootprints[0].fpPads.push(new FootprintPad({}, )); // TODO: implement
+                setTargetFootprints((prev) => [...prev]);
+                setEditorMode("select");
+                setReactDummyVariableRender((prev) => prev + 1);
+                break;
+              }
+              case "add-segment": {
+                if (!addSegmentStart) {
+                  setAddSegmentStart([clickPos.x, clickPos.y]);
+                } else {
+                  // const newSegment = new Segment( {
+                  //   start: addSegmentStart,
+                  //   end: [clickPos.x, clickPos.y],
+                  //   widthRadius: 1,
+                  //   boundary_value: Math.random(),
+                  //   boundary_type: BoundaryType.NEUMANN,
+                  // });
+                  // setTargetSegments((prev) => [...prev, newSegment]);
+                  setAddSegmentStart(null);
+                  setEditorMode("select");
+                  setReactDummyVariableRender((prev) => prev + 1);
+                }
+                break;
+              }
+            }
           }}
           onWheel={(e) => {
             const worldPosBeforeZoom = getMouseWorldPosition(e.nativeEvent);

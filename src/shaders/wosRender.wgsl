@@ -11,6 +11,7 @@
 
 // @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
 @group(1) @binding(0) var<storage, read_write> wos_valueList: array<f32>;
+@group(1) @binding(1) var<storage, read_write> onBoundaryList: array<f32>;
 
 @vertex
 fn vertMain(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f {
@@ -47,44 +48,53 @@ fn fragMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let simBR = simTL + simSize;
     let inSim = worldPos.x >= simTL.x && worldPos.x <= simBR.x && worldPos.y >= simTL.y && worldPos.y <= simBR.y;
 
-
     let simUV = (worldPos - simTL) / simSize;
-    if !inSim {
-        return vec4f(0.5, 0.5, 0.5, 1.0);
-    }
 
     // return vec4f(simUV.x, simUV.y, 0.0, 1.0);
     let simCoords = vec2u(simUV * vec2f(simRes));
     let simIndex = simCoords.y * simRes.x + simCoords.x;
 
-    let temp = wos_valueList[simIndex];
 
-    if temp < 0.0 {
+    let boardUV = (worldPos - boardTL) / boardSize;
+    let boardCoords = vec2u(boardUV * vec2f(simRes));
+    let boardIndex = boardCoords.y * simRes.x + boardCoords.x;
+
+    if (onBoundaryList[boardIndex] == 0.0 && !inSim) {
+        return vec4f(1.0, 1.0, 1.0, 1.0);
+    }
+
+    if !inSim {
+        return vec4f(0.1, 0.0, 0.1, 1.0);
+    }
+
+    let temp = wos_valueList[simIndex];
+    
+    if temp == -1.0 {
         return vec4f(0.0, 0.0, 0.0, 1.0);
     } else {
-        let avgTemp = (temp / f32(totalWalks) + 0.35); // +0.35 to offset color pallet
+        let avgTemp = (temp / f32(totalWalks)); // +0.35 to offset color pallet
         // APROXIMATELY REMAP TO 0-1 RANGE
         // MAX IS THE MAX BOUNDARY VALUE, WHICH CAN BE EXCEEDED IN WOSTR
-        let normalizedTemp = (avgTemp - minMaxBVals.x) / (minMaxBVals.y - minMaxBVals.x);
+        let normalizedTemp = (avgTemp - minMaxBVals.x) / (minMaxBVals.y - minMaxBVals.x) + 0.35;
 
         // DIFFERENT COLOR PALLETS :)
-
         //let outColor = twoToneColor(temp / f32(totalWalks));
-        // let outColor = color(
-        //     vec3f(0.5, 0.5, 0.5),
-        //     vec3f(0.5, 0.5, 0.5),
-        //     vec3f(1.0, 1.0, 1.0),
-        //     vec3f(0.00, 0.33, 0.67),
-        //     normalizedTemp
-        // );
-
+        
         let outColor = color(
-            vec3f(0.300, 0.500, 0.700),  // a
-            vec3f(0.700, 0.500, 0.300),  // b
-            vec3f(1.000, 1.000, 1.000),  // c
-            vec3f(0.000, 0.150, 0.350),  // d
+            vec3f(0.5, 0.5, 0.5),
+            vec3f(0.5, 0.5, 0.5),
+            vec3f(1.0, 1.0, 1.0),
+            vec3f(0.00, 0.33, 0.67),
             normalizedTemp
         );
+
+        // let outColor = color(
+        //     vec3f(0.300, 0.500, 0.700),  // a
+        //     vec3f(0.700, 0.500, 0.300),  // b
+        //     vec3f(1.000, 1.000, 1.000),  // c
+        //     vec3f(0.000, 0.150, 0.350),  // d
+        //     normalizedTemp
+        // );
 
         // let outColor = color(
         //     vec3f(0.500, 0.000, 0.500),  // a

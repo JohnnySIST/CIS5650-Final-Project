@@ -451,6 +451,7 @@ export class Renderer {
 
   private walkCountBuffer: GPUBuffer;
   private wosValuesBuffer: GPUBuffer;
+  private onBoundaryBuffer: GPUBuffer;
   private uvBuffer: GPUBuffer;
   private segmentGeomBuffer: GPUBuffer;
 
@@ -570,6 +571,10 @@ export class Renderer {
     // UV BUFFERS
 
     this.createUVBuffer();
+
+    // DRAW BOUNDARY BUFFER
+
+    this.createOnBoundaryBuffer();
 
     // WOS BUFFERS
 
@@ -700,7 +705,6 @@ export class Renderer {
       if (circles[i].boundary_value < this.minMaxBvals[0]) {
         this.minMaxBvals[0] = circles[i].boundary_value;
       }
-
       if (circles[i].boundary_value > this.minMaxBvals[1]) {
         this.minMaxBvals[1] = circles[i].boundary_value;
       }
@@ -900,9 +904,12 @@ export class Renderer {
     });
 
     this.uvBindGroup_uvPre = this.device.createBindGroup({
-      label: "uv bg compute",
+      label: "uv bg compute uvPre",
       layout: this.uvPre_Pipeline.getBindGroupLayout(1),
-      entries: [{ binding: 0, resource: { buffer: this.uvBuffer } }],
+      entries: [
+        { binding: 0, resource: { buffer: this.uvBuffer } },
+        { binding: 1, resource: { buffer: this.onBoundaryBuffer } },
+      ],
     });
 
     this.bvhBindGroup_uvPre = this.device.createBindGroup({
@@ -923,6 +930,19 @@ export class Renderer {
     this.uvBuffer = this.device.createBuffer({
       label: "uv buffer",
       size: align(this.simRes[0] * this.simRes[1] * 8, 16),
+      usage:
+        GPUBufferUsage.STORAGE |
+        GPUBufferUsage.COPY_DST |
+        GPUBufferUsage.COPY_SRC,
+    });
+  }
+
+  private createOnBoundaryBuffer() {
+    // THIS STORES UVs ON SCREEN FOR QUEERY POINTS
+    this.onBoundaryBuffer?.destroy();
+    this.onBoundaryBuffer = this.device.createBuffer({
+      label: "uv buffer",
+      size: align(this.simRes[0] * this.simRes[1] * 4, 16),
       usage:
         GPUBufferUsage.STORAGE |
         GPUBufferUsage.COPY_DST |
@@ -982,7 +1002,7 @@ export class Renderer {
     });
 
     this.uvBindGroup_compute = device.createBindGroup({
-      label: "uv bg compute",
+      label: "uv bg compute wos",
       layout: this.wos_pipeline.getBindGroupLayout(1),
       entries: [
         { binding: 0, resource: { buffer: this.uvBuffer } },
@@ -1101,6 +1121,7 @@ export class Renderer {
       entries: [
         // { binding: 0, resource: { buffer: this.uvBuffer } },
         { binding: 0, resource: { buffer: this.wosValuesBuffer } },
+        { binding: 1, resource: { buffer: this.onBoundaryBuffer } },
       ],
     });
   }
@@ -1147,6 +1168,12 @@ export class Renderer {
       new Float32Array(this.wosValuesBuffer.size / 4).fill(0)
     );
     this.uvPreprocessNeeded = true;
+
+    console.log("SIM REZ: " + this.simRes);
+    console.log("SIM TL: " + this.simTL);
+    console.log("SIM SIZE: " + this.simSize);
+    console.log("BOARD SIZE: " + this.boardSize);
+    console.log("BOARD TL: " + this.boardTL);
     requestAnimationFrame(() => this.frame(this.simUpdateId));
   }
 

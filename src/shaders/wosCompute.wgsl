@@ -485,6 +485,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
         return;
     }
 
+
     let garbo1 = bvhNeuGeo[0];
     let garbo2 = bvhNeuNodes[0];
 
