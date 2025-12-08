@@ -3,6 +3,7 @@
 ![](./img/WoStr_BigBoard_V1.png)
 
 # Overview
+
 [LIVE DEMO](https://johnnysist.github.io/CIS5650-Final-Project/)
 
 We are team **Circuit Nova** : [Oliver Hendrych](https://github.com/hendrych-upenn), [Lewis Ghrist](https://siwel-cg.github.io/siwel.cg_websiteV1/index.html#home), and [Hongyi Ding](https://johnnyding.com/portfolio). This project is a browser-based, WebGPU thermal simulation tool for PCB design and prototyping, built on the Walk on Stars (WoStr) algorithm. Users can import or draw PCB layouts, set boundary condition types and values, and interactively move components while the heat distribution updates in real time.
@@ -27,13 +28,13 @@ Walk on Stars is an extension to the WoS algorithm to allow for a combination of
 
 The original papers, as well as many extentions, can be found here: [https://rohan-sawhney.github.io/mcgp-resources/](https://rohan-sawhney.github.io/mcgp-resources/)
 
-| Walk on Spheres (Dirichlet only) | Walk on Stars (Dirichlet + Neumann) |
-|:--:|:--:|
-| ![Walk On Spheres](./WoS_SS1.png) | ![Walk On Stars](./SoStr_SS1.png) |
+| Walk on Spheres (Dirichlet only)  | Walk on Stars (Dirichlet + Neumann) |
+| :-------------------------------: | :---------------------------------: |
+| ![Walk On Spheres](./WoS_SS1.png) |  ![Walk On Stars](./SoStr_SS1.png)  |
 
 # Break Down
 
-The general pipeline involves two main compute shaders. First, we do an initial screening of our simulation domain to get just the query points within the boundaries of our geometry. This can be done once before the simulation starts and allows us to only simulate on point's that will actually result in meaning full data. These query points are then shipped to the second compute shader where the real work happens. This second compute shader handles the actuall simulation. For each query point, we send out these random walks, stepping based on the closest distance to a boundary. This closest distance is found using a BVH struture (or in this case BAH structure since we are in 2D), which drastically speeds up walk times, especially in complex boards. As explained in the WoStr method, at Neumann boundaries, this walk get reflected, picking up some flux value, and at Dirichlet boundarie's, the walk ends and returns the Dirichlet boundary value along with any accumulated flux along the walk. These results then get sent to a final fragment shader, which averages all the walk results for each query point, fits that value through a simple color ramp, and draws it to the screen along with the boundary geometry. 
+The general pipeline involves two main compute shaders. First, we do an initial screening of our simulation domain to get just the query points within the boundaries of our geometry. This can be done once before the simulation starts and allows us to only simulate on point's that will actually result in meaning full data. These query points are then shipped to the second compute shader where the real work happens. This second compute shader handles the actuall simulation. For each query point, we send out these random walks, stepping based on the closest distance to a boundary. This closest distance is found using a BVH struture (or in this case BAH structure since we are in 2D), which drastically speeds up walk times, especially in complex boards. As explained in the WoStr method, at Neumann boundaries, this walk get reflected, picking up some flux value, and at Dirichlet boundarie's, the walk ends and returns the Dirichlet boundary value along with any accumulated flux along the walk. These results then get sent to a final fragment shader, which averages all the walk results for each query point, fits that value through a simple color ramp, and draws it to the screen along with the boundary geometry.
 
 ## Interactivity
 
@@ -42,10 +43,13 @@ Here is the layout of the UI:
 ![interaction](img/interaction.png)
 
 Major features include:
+
 - Import and export as KiCad PCB formats
 - Simulation zone selection
 - Change simulation resolution
 - Geometry selection, addition/deletion and alteration
+- Change boundary conditions and values
+- Selection of board layers
 - Zooming, panning camera controls
 - Toggle simulation on/off
 - Live FPS display
@@ -56,8 +60,9 @@ A unique advantage of this WoStr method, is that because it is based only on a s
   <img src="./img/BoundaryLines_V1.png" width="50%">
 </p>
 
-The main user interaction feature is being able to select, add/delete, and move geometry as well as change the boundary types and values as needed. This allows for custom board creation or user imported boards to be edited and adjusted. The final configuration can then be exported out. 
 The main user interaction feature is being able to select, add/delete, and move geometry as well as change the boundary types and values as needed. This allows for custom board creation or user imported boards to be edited and adjusted. The final configuration can then be exported out.
+
+The user can also choose which layer of the board they would like to modify and simulate. Modern PCB designs contain many layers, and it is important to be able to simulate any of them.
 
 Finally, for some quality of life features, we implemented a basic camera system for navigating the board, a live FPS display for performance monitoring, a pause button for the simulation, and a selection menu for adjusting simulation resolution.
 
@@ -67,15 +72,10 @@ Here is a demo video of the tool in action.
 
 ## KiCad Integration
 
-- Importing KiCad PCB Design files
-  - Uses [kicadts](https://www.npmjs.com/package/kicadts) to parse `.kicad_pcb` files
-  - Imports footprint and segment geometries
-- (Planned) Exporting Design Back to Kicad
-  - After interactive modifications to board (segments, footprints, vias)
-  - Current kicadts export output fails to reopen in KiCad
-    - Likely need to fork package
+An important part of open source development is integrating with other tools from the ecosystem. KiCad is a very popular open source EDA (electronic design automation) tool that is used for PCB design and prototyping. Additionally, other software have capabilities to import and export KiCad PCB files, making it a common element for PCB design. As such, we chose it as our primary integration point, for both import and export of board geometry. Our tool uses a [forked](https://github.com/hendrych-upenn/kicadts) version of the [kicadts](https://github.com/tscircuit/kicadts) package to parse `.kicad_pcb` files and reexport the modified `.kicad_pcb` file. Its plaintext format makes it easy to parse and modify. Upon importing a KiCad PCB file, the tool will parse the file and extract the footprint and segment geometries, which can then be used in the simulation. The user can then modify, delete, or add geometry as needed. When the user is done, the geometry can be exported back to a KiCad PCB file.
 
 # Future Work
+
 There are still some additional features that can be added for more functionality or better resutls. For starters, there has been a lot of recent work on extending or improving the Walk on Stars algorithm. This includes things like faster convergence and more complex boundary types. The simulation at the moment doesn't take into account material properties, which in a full, physically accurate simulation is important. As a prototying tool, getting this approximate solution is still valuable, but WoStr can be extended to support materal properties. Additionally, the pipeline can be extended to support more geometry types beyond simple segments and circles, making it more in line with prexisting PCB editors. Finally, as always, further optimizations and performance improvemnts can be made for smoother and faster results.
 
 # References
