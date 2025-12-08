@@ -42,7 +42,6 @@ The main user interaction feature is being able to select, add/delete, and move 
 
 Finally, for some quality of life features, we implemented a basic camera system for navigating the board, a live FPS display for performance monitoring, a pause button for the simulation, and a selection menue for adjusting simulation resolution.
 
-
 ![Interactive Visualization demo](./Milestone_2/camera.gif)
 
 ## KiCad Integration
@@ -50,14 +49,15 @@ Finally, for some quality of life features, we implemented a basic camera system
 - Importing KiCad PCB Design files
   - Uses [kicadts](https://www.npmjs.com/package/kicadts) to parse `.kicad_pcb` files
   - Imports footprint and segment geometries
-  - (Planned) Import layer stack
-    - Automatically derive electrical and thermal properties of each layer
 - (Planned) Exporting Design Back to Kicad
   - After interactive modifications to board (segments, footprints, vias)
   - Current kicadts export output fails to reopen in KiCad
     - Likely need to fork package
 
-## References
+# Future Work
+There are still some additional features that can be added for more functionality or better resutls. For starters, there has been a lot of recent work on extending or improving the Walk on Stars algorithm. This includes things like faster convergence and more complex boundary types. The simulation at the moment doesn't take into account material properties, which in a full, physically accurate simulation is important. As a prototying tool, getting this approximate solution is still valuable, but WoStr can be extended to support materal properties. Additionally, the pipeline can be extended to support more geometry types beyond simple segments and circles, making it more in line with prexisting PCB editors. Finally, as always, further optimizations and performance improvemnts can be made for smoother and faster results.
+
+# References
 
 1: [https://jrainimo.com/build/2024/11/oss-thermal-simulation-of-pcbs/](https://jrainimo.com/build/2024/11/oss-thermal-simulation-of-pcbs/)
 
