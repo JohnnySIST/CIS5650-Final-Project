@@ -38,33 +38,31 @@ The general pipeline involves two main compute shaders. First, we do an initial 
 
 ## Interactivity
 
-<<<<<<< HEAD
-=======
 Here is the layout of the UI:
 
 ![interaction](img/interaction.png)
 
 Major features include:
+
 - Import and export as KiCad PCB formats
 - Simulation zone selection
 - Change simulation resolution
 - Geometry selection, addition/deletion and alteration
+- Change boundary conditions and values
+- Selection of board layers
 - Zooming, panning camera controls
 - Toggle simulation on/off
 - Live FPS display
 
->>>>>>> 240682adcc01162372c9bd3b857d8fcb938a2fb6
 A unique advantage of this WoStr method, is that because it is based only on a set of initial query points, we don't need to do a global solve to get results. To take advantage of this, we implemented a simulation zone selection feature that lets users focus computation on a specific region of interest. For complex boards, or if there is a specific area you are particularly interested in, you can easily simulate just on that area in a higher resolution, without paying for the cost of simulating the entire board.
 
 <p align="center">
   <img src="./img/BoundaryLines_V1.png" width="50%">
 </p>
 
-<<<<<<< HEAD
-=======
-The main user interaction feature is being able to select, add/delete, and move geometry as well as change the boundary types and values as needed. This allows for custom board creation or user imported boards to be edited and adjusted. The final configuration can then be exported out. 
->>>>>>> 240682adcc01162372c9bd3b857d8fcb938a2fb6
 The main user interaction feature is being able to select, add/delete, and move geometry as well as change the boundary types and values as needed. This allows for custom board creation or user imported boards to be edited and adjusted. The final configuration can then be exported out.
+
+The user can also choose which layer of the board they would like to modify and simulate. Modern PCB designs contain many layers, and it is important to be able to simulate any of them.
 
 Finally, for some quality of life features, we implemented a basic camera system for navigating the board, a live FPS display for performance monitoring, a pause button for the simulation, and a selection menu for adjusting simulation resolution.
 
