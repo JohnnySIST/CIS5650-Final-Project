@@ -72,137 +72,6 @@ function computeBBox(
   return [minX, minY, maxX, maxY];
 }
 
-// OLD BVH CREATION
-// function subdivide(
-//   geoms: Geom[],
-//   centroids: [number, number][],
-//   circles: Circle[],
-//   segments: Segment[],
-//   leafSize: number
-// ): BVHTreeNode {
-//   const [minX, minY, maxX, maxY] = computeBBox(geoms, circles, segments);
-
-//   if (geoms.length <= leafSize) {
-//     return {
-//       node: {
-//         bbox_min: [minX, minY],
-//         bbox_max: [maxX, maxY],
-//         is_leaf: true,
-//         geom_start: -1,
-//         geom_count: geoms.length,
-//         left_child: -1,
-//         right_child: -1,
-//       },
-//       geoms: geoms,
-//     };
-//   }
-
-//   const extentX = maxX - minX;
-//   const extentY = maxY - minY;
-
-//   var splitAxis: 0 | 1 = 1;
-//   if (extentX > extentY) {
-//     splitAxis = 0;
-//   }
-
-//   var mid: number;
-//   if (splitAxis == 0) {
-//     mid = (maxX - minX) * 0.5 + minX;
-//   } else {
-//     mid = (maxY - minY) * 0.5 + minY;
-//   }
-
-//   var leftGeoms: Geom[] = [];
-//   var rightGeoms: Geom[] = [];
-
-//   geoms.forEach((geo) => {
-//     var center: [number, number];
-//     if (geo.type == 0) {
-//       center = centroids[geo.index];
-//     } else {
-//       center = centroids[geo.index + circles.length];
-//     }
-
-//     if (center[splitAxis] < mid) {
-//       leftGeoms.push(geo);
-//     } else {
-//       rightGeoms.push(geo);
-//     }
-//   });
-
-//   if (leftGeoms.length === 0 || rightGeoms.length === 0) {
-//     leftGeoms = [];
-//     rightGeoms = [];
-
-//     splitAxis = (splitAxis + 1) % 2;
-//     if (splitAxis == 0) {
-//       mid = (maxX - minX) * 0.5 + minX;
-//     } else {
-//       mid = (maxY - minY) * 0.5 + minY;
-//     }
-
-//     geoms.forEach((geo) => {
-//       var center: [number, number];
-//       if (geo.type == 0) {
-//         center = centroids[geo.index];
-//       } else {
-//         center = centroids[geo.index + circles.length];
-//       }
-
-//       if (center[splitAxis] < mid) {
-//         leftGeoms.push(geo);
-//       } else {
-//         rightGeoms.push(geo);
-//       }
-//     });
-//   }
-
-//   if (leftGeoms.length === 0 || rightGeoms.length === 0) {
-//     return {
-//       node: {
-//         bbox_min: [minX, minY],
-//         bbox_max: [maxX, maxY],
-//         is_leaf: true,
-//         geom_start: -1,
-//         geom_count: geoms.length,
-//         left_child: -1,
-//         right_child: -1,
-//       },
-//       geoms: geoms,
-//     };
-//   }
-
-//   const leftChild = subdivide(
-//     leftGeoms,
-//     centroids,
-//     circles,
-//     segments,
-//     leafSize
-//   );
-//   const rightChild = subdivide(
-//     rightGeoms,
-//     centroids,
-//     circles,
-//     segments,
-//     leafSize
-//   );
-
-//   return {
-//     node: {
-//       bbox_min: [minX, minY],
-//       bbox_max: [maxX, maxY],
-//       is_leaf: false,
-//       geom_start: -1,
-//       geom_count: -1,
-//       left_child: -1,
-//       right_child: -1,
-//     },
-//     geoms: [],
-//     left: leftChild,
-//     right: rightChild,
-//   };
-// }
-
 function subdivide(
   geoms: Geom[],
   centroids: [number, number][],
@@ -457,6 +326,9 @@ export class Renderer {
 
   private minMaxBValsBuffer: GPUBuffer;
 
+  // SAVE IMAGE PIPELINE
+
+
   // BVH BUFFERS
   private bvhBindGroup_uvPre: GPUBindGroup;
   private bvhBindGroup_compute: GPUBindGroup;
@@ -659,6 +531,7 @@ export class Renderer {
       const simResData = new Uint32Array(this.simRes);
       device.queue.writeBuffer(this.simResBuffer, 0, simResData);
       this.createUVBuffer();
+      this.createOnBoundaryBuffer();
       this.createWOSValuesBuffer();
       this.createAllBindGroups();
       this.resetSim(false);
