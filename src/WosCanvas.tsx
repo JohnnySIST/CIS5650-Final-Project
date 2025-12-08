@@ -21,6 +21,7 @@ import {
   PadLayers,
   SegmentStart,
   Layer,
+  At,
 } from "kicadts";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
@@ -55,9 +56,21 @@ type BoundaryPadFullRef = [BoundaryPad, BoundaryFootprint];
 function getFullPosition(padFullRef: BoundaryPadFullRef) {
   const pad = padFullRef[0];
   const footprint = padFullRef[1];
+  const padAngle = pad.at?.angle ?? 0;
+  const footprintAngle =
+    footprint.position instanceof At ? footprint.position.angle ?? 0 : 0;
+  const angle = (footprintAngle * Math.PI) / 180;
+  const padPosition = {
+    x: pad.at?.x || 0,
+    y: pad.at?.y || 0,
+  };
+  const rotatedPad = {
+    x: Math.cos(angle) * padPosition.x + Math.sin(angle) * padPosition.y,
+    y: -Math.sin(angle) * padPosition.x + Math.cos(angle) * padPosition.y,
+  };
   return {
-    x: (footprint.position?.x || 0) + (pad.at?.x || 0), // TODO: Apply rotation
-    y: (footprint.position?.y || 0) + (pad.at?.y || 0),
+    x: (footprint.position?.x || 0) + rotatedPad.x,
+    y: (footprint.position?.y || 0) + rotatedPad.y,
   };
 }
 
