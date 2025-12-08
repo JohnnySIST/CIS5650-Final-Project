@@ -123,6 +123,11 @@ export default function WosCanvas({
   const [mouseDownSelectedSegment, setMouseDownSelectedSegment] =
     useState<BoundarySegment | null>(null);
 
+  const [chooseableLayers, setChooseableLayers] = useState<string[]>([
+    "F.Cu",
+    "B.Cu",
+  ]);
+
   const [targetLayer, setTargetLayer] = useState("B.Cu");
 
   const edgeCutSegments = useMemo(() => {
@@ -700,6 +705,22 @@ export default function WosCanvas({
     setResMenuAnchorEl(null);
   };
 
+  const [layerMenuAnchorEl, setLayerMenuAnchorEl] =
+    React.useState<null | HTMLElement>(null);
+  const layerMenuOpen = Boolean(layerMenuAnchorEl);
+  const handleLayerMenuClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setLayerMenuAnchorEl(event.currentTarget);
+  };
+  const handleLayerMenuClose = (layer?: string) => {
+    if (layer) {
+      setTargetLayer(layer);
+      console.log("Set target layer to", layer);
+      setReactDummyVariableRender((prev) => prev + 1);
+      setReactDummyVariable2D((prev) => prev + 1);
+    }
+    setLayerMenuAnchorEl(null);
+  };
+
   return (
     <>
       <div style={{ position: "absolute", top: 24, right: 12, zIndex: 2000 }}>
@@ -804,6 +825,13 @@ export default function WosCanvas({
                 ) || []
               );
 
+              setChooseableLayers(
+                pcb?.layers?.definitions
+                  .map((layer) => layer.name)
+                  .filter((name) => name != null)
+                  .filter((name) => name.endsWith(".Cu")) || []
+              );
+
               console.log("Parsed KiCad PCB file:", pcb);
             }
           }}
@@ -866,12 +894,46 @@ export default function WosCanvas({
             720x480
           </MenuItem>
         </Menu>
+        <Button
+          id="layer-button"
+          aria-controls={layerMenuOpen ? "layer-menu" : undefined}
+          aria-haspopup="true"
+          aria-expanded={layerMenuOpen ? "true" : undefined}
+          variant="contained"
+          color="primary"
+          sx={{
+            position: "fixed",
+            right: 32,
+            top: 270,
+            fontSize: "0.95rem",
+          }}
+          onClick={handleLayerMenuClick}
+        >
+          Target Layer: {targetLayer}
+        </Button>
+        <Menu
+          id="layer-menu"
+          anchorEl={layerMenuAnchorEl}
+          open={layerMenuOpen}
+          onClose={() => handleLayerMenuClose()}
+          slotProps={{
+            list: {
+              "aria-labelledby": "layer-button",
+            },
+          }}
+        >
+          {chooseableLayers.map((layer) => (
+            <MenuItem key={layer} onClick={() => handleLayerMenuClose(layer)}>
+              {layer}
+            </MenuItem>
+          ))}
+        </Menu>
         {(selectedPad || selectedSegment) && (
           <div
             style={{
               position: "fixed",
               right: 32,
-              top: 270,
+              top: 320,
               backgroundColor: "white",
               padding: "16px",
               borderRadius: "4px",
