@@ -76,6 +76,7 @@ export default function WosCanvas({
   const [editorMode, setEditorMode] = useState<EditorMode>("select");
   const [isPanning, setIsPanning] = useState(false);
   const [isSelecting, setIsSelecting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const [selectionStart, setSelectionStart] = useState<[number, number] | null>(
     null
@@ -123,8 +124,8 @@ export default function WosCanvas({
       edgeCutSegments?.reduce(
         (acc, line) => {
           return [
-            Math.min(acc[0], line.startPoint?.x || Number.POSITIVE_INFINITY),
-            Math.min(acc[1], line.startPoint?.y || Number.POSITIVE_INFINITY),
+            Math.min(acc[0], line.start?.x || Number.POSITIVE_INFINITY),
+            Math.min(acc[1], line.start?.y || Number.POSITIVE_INFINITY),
           ];
         },
         [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY]
@@ -138,8 +139,8 @@ export default function WosCanvas({
       edgeCutSegments?.reduce(
         (acc, line) => {
           return [
-            Math.max(acc[0], line.endPoint?.x || Number.NEGATIVE_INFINITY),
-            Math.max(acc[1], line.endPoint?.y || Number.NEGATIVE_INFINITY),
+            Math.max(acc[0], line.end?.x || Number.NEGATIVE_INFINITY),
+            Math.max(acc[1], line.end?.y || Number.NEGATIVE_INFINITY),
           ];
         },
         [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY]
@@ -171,7 +172,8 @@ export default function WosCanvas({
   const [viewTL, setViewTL] = useState<[number, number]>(simTL); // floats, world space
   const [viewSize, setViewSize] = useState<[number, number]>(simSize); // floats, world space
 
-  const [reactDummyVariable, setReactDummyVariable] = useState(0);
+  const [reactDummyVariableRender, setReactDummyVariableRender] = useState(0);
+  const [reactDummyVariable2D, setReactDummyVariable2D] = useState(0);
 
   function getWorldPositionFromCanvasUV(
     canvasU: number,
@@ -443,8 +445,8 @@ export default function WosCanvas({
 
   const renderSegments: RenderSegment[] = drawAbleSegments.map((segment) => {
     return {
-      start: [segment.startPoint?.x || 0, segment.startPoint?.y || 0],
-      end: [segment.endPoint?.x || 0, segment.endPoint?.y || 0],
+      start: [segment.start?.x || 0, segment.start?.y || 0],
+      end: [segment.end?.x || 0, segment.end?.y || 0],
       widthRadius: (segment.width || 0) / 2,
       boundary_value: segment.boundaryValue,
       boundary_type: segment.boundaryType,
@@ -539,17 +541,17 @@ export default function WosCanvas({
 
     if (
       selectedSegment &&
-      selectedSegment.startPoint &&
-      selectedSegment.endPoint &&
+      selectedSegment.start &&
+      selectedSegment.end &&
       selectedSegment.width
     ) {
       const p1 = getCanvasPositionFromWorldPosition(
-        selectedSegment.startPoint.x,
-        selectedSegment.startPoint.y
+        selectedSegment.start.x,
+        selectedSegment.start.y
       );
       const p2 = getCanvasPositionFromWorldPosition(
-        selectedSegment.endPoint.x,
-        selectedSegment.endPoint.y
+        selectedSegment.end.x,
+        selectedSegment.end.y
       );
       const canvasWidth = scaleWorldPositionToCanvasPosition(
         selectedSegment.width,
@@ -596,7 +598,8 @@ export default function WosCanvas({
     selectedSegment,
     viewTL,
     viewSize,
-    reactDummyVariable,
+    reactDummyVariableRender,
+    reactDummyVariable2D,
   ]);
 
   useEffect(() => {
@@ -646,7 +649,7 @@ export default function WosCanvas({
   useEffect(() => {
     refreshSimulation();
     console.log("Refreshed simulation");
-  }, [rendererRef.current, pcbDesign, reactDummyVariable]);
+  }, [rendererRef.current, pcbDesign, reactDummyVariableRender]);
 
   const updateTraceWidth = (width: number) => {
     setTraceWidth(width);
@@ -666,7 +669,7 @@ export default function WosCanvas({
     }
     if (selectedPad || selectedSegment) {
       console.log("Updated selected pad or segment");
-      setReactDummyVariable((prev) => prev + 1);
+      setReactDummyVariableRender((prev) => prev + 1);
     }
   };
 
@@ -860,7 +863,7 @@ export default function WosCanvas({
                   const newVal = e.target.value as BoundaryType;
                   if (selectedPad) selectedPad[0].boundaryType = newVal;
                   if (selectedSegment) selectedSegment.boundaryType = newVal;
-                  setReactDummyVariable((prev) => prev + 1);
+                  setReactDummyVariableRender((prev) => prev + 1);
                 }}
               >
                 <MenuItem value={BoundaryType.DIRICHILET}>Dirichlet</MenuItem>
@@ -882,7 +885,7 @@ export default function WosCanvas({
                 const newVal = parseFloat(e.target.value);
                 if (selectedPad) selectedPad[0].boundaryValue = newVal;
                 if (selectedSegment) selectedSegment.boundaryValue = newVal;
-                setReactDummyVariable((prev) => prev + 1);
+                setReactDummyVariableRender((prev) => prev + 1);
               }}
             />
           </div>
@@ -953,22 +956,18 @@ export default function WosCanvas({
             setViewTL([viewTL[0] - dx, viewTL[1] - dy]);
           }}
           onMouseMove={(e) => {
+            const uvMove = scaleCanvasPositionToCanvasUV(
+              e.movementX,
+              e.movementY
+            );
+
+            const worldMove = scaleCanvasUVToWorldPosition(uvMove.u, uvMove.v);
             if (isPanning) {
               // We need to scale the movement by the canvas's CSS vs internal resolution
               // to ensure 1:1 panning at any display size.
               if (!uiCanvasRef.current || !webgpuCanvasRef.current) {
                 return;
               }
-
-              const uvMove = scaleCanvasPositionToCanvasUV(
-                e.movementX,
-                e.movementY
-              );
-
-              const worldMove = scaleCanvasUVToWorldPosition(
-                uvMove.u,
-                uvMove.v
-              );
 
               setViewTL((prevViewTL) => [
                 prevViewTL[0] - worldMove.x,
@@ -978,6 +977,34 @@ export default function WosCanvas({
             if (isSelecting) {
               const newSelectionEnd = getMouseWorldPosition(e.nativeEvent);
               setSelectionEnd([newSelectionEnd.x, newSelectionEnd.y]);
+            }
+            if (isDragging) {
+              if (
+                selectedSegment &&
+                selectedSegment.start &&
+                selectedSegment.end
+              ) {
+                // console.log("Dragging segment");
+                // console.log(worldMove);
+                const newStart = {
+                  x: selectedSegment.start.x + worldMove.x,
+                  y: selectedSegment.start.y + worldMove.y,
+                };
+                const newEnd = {
+                  x: selectedSegment.end.x + worldMove.x,
+                  y: selectedSegment.end.y + worldMove.y,
+                };
+                selectedSegment.start = newStart;
+                selectedSegment.end = newEnd;
+                // console.log(selectedSegment);
+                setReactDummyVariable2D((prev) => prev + 1);
+              }
+              if (selectedPad && selectedPad[1] && selectedPad[1].position) {
+                console.log("Dragging pad");
+                selectedPad[1].position.x += worldMove.x;
+                selectedPad[1].position.y += worldMove.y;
+                setReactDummyVariable2D((prev) => prev + 1);
+              }
             }
           }}
           onMouseDown={(e) => {
@@ -996,20 +1023,37 @@ export default function WosCanvas({
 
               const worldPos = getMouseWorldPosition(e.nativeEvent);
 
-              setMouseDownSelectedPad(getPadsAtPosition(worldPos)[0] ?? null);
-              setMouseDownSelectedSegment(
-                getSegmentsAtPosition(worldPos)[0] ?? null
-              );
+              const possiblePads = getPadsAtPosition(worldPos);
+              const possibleSegments = getSegmentsAtPosition(worldPos);
 
-              setIsSelecting(true);
-              const newSelectionStart: [number, number] = [
-                worldPos.x,
-                worldPos.y,
-              ];
-              const newSelectionEnd: [number, number] = [...newSelectionStart];
+              if (
+                selectedSegment &&
+                possibleSegments.some((segment) => segment === selectedSegment)
+              ) {
+                setIsDragging(true);
+              } else if (
+                selectedPad &&
+                possiblePads.some((pad) => pad[0] === selectedPad[0])
+              ) {
+                setIsDragging(true);
+              } else {
+                setMouseDownSelectedPad(getPadsAtPosition(worldPos)[0] ?? null);
+                setMouseDownSelectedSegment(
+                  getSegmentsAtPosition(worldPos)[0] ?? null
+                );
 
-              setSelectionStart(newSelectionStart);
-              setSelectionEnd(newSelectionEnd);
+                setIsSelecting(true);
+                const newSelectionStart: [number, number] = [
+                  worldPos.x,
+                  worldPos.y,
+                ];
+                const newSelectionEnd: [number, number] = [
+                  ...newSelectionStart,
+                ];
+
+                setSelectionStart(newSelectionStart);
+                setSelectionEnd(newSelectionEnd);
+              }
             }
           }}
           onMouseUp={(e) => {
@@ -1023,34 +1067,40 @@ export default function WosCanvas({
               if (!uiCanvasRef.current) {
                 return;
               }
-              setIsSelecting(false);
-              if (selectionStart && selectionEnd) {
-                const minX = Math.min(selectionStart[0], selectionEnd[0]);
-                const maxX = Math.max(selectionStart[0], selectionEnd[0]);
-                const minY = Math.min(selectionStart[1], selectionEnd[1]);
-                const maxY = Math.max(selectionStart[1], selectionEnd[1]);
-                const width = maxX - minX;
-                const height = maxY - minY;
-                console.log("Selected area:", minX, minY, width, width);
-                const canvasUVArea = scaleWorldPositionToCanvasUV(
-                  width,
-                  height
-                );
-                if (canvasUVArea.u < 0.01 || canvasUVArea.v < 0.01) {
-                  if (mouseDownSelectedPad || mouseDownSelectedSegment) {
-                    setSelectedPad(mouseDownSelectedPad);
-                    setSelectedSegment(mouseDownSelectedSegment);
+              if (isSelecting) {
+                setIsSelecting(false);
+                if (selectionStart && selectionEnd) {
+                  const minX = Math.min(selectionStart[0], selectionEnd[0]);
+                  const maxX = Math.max(selectionStart[0], selectionEnd[0]);
+                  const minY = Math.min(selectionStart[1], selectionEnd[1]);
+                  const maxY = Math.max(selectionStart[1], selectionEnd[1]);
+                  const width = maxX - minX;
+                  const height = maxY - minY;
+                  console.log("Selected area:", minX, minY, width, width);
+                  const canvasUVArea = scaleWorldPositionToCanvasUV(
+                    width,
+                    height
+                  );
+                  if (canvasUVArea.u < 0.01 || canvasUVArea.v < 0.01) {
+                    if (mouseDownSelectedPad || mouseDownSelectedSegment) {
+                      setSelectedPad(mouseDownSelectedPad);
+                      setSelectedSegment(mouseDownSelectedSegment);
+                    } else {
+                      setSimTL(boardTL);
+                      setSimSize(boardSize);
+                    }
                   } else {
-                    setSimTL(boardTL);
-                    setSimSize(boardSize);
+                    setSimTL([minX, minY]);
+                    setSimSize([width, height]);
                   }
-                } else {
-                  setSimTL([minX, minY]);
-                  setSimSize([width, height]);
-                }
 
-                setSelectionStart(null);
-                setSelectionEnd(null);
+                  setSelectionStart(null);
+                  setSelectionEnd(null);
+                }
+              }
+              if (isDragging) {
+                setIsDragging(false);
+                setReactDummyVariableRender((prev) => prev + 1);
               }
             }
           }}
