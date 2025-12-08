@@ -3,8 +3,9 @@
 ![](./img/WoStr_BigBoard_V1.png)
 
 # Overview
+[LIVE DEMO](https://johnnysist.github.io/CIS5650-Final-Project/)
 
-We team **Circuit Nova** : [Oliver Hendrych](https://github.com/hendrych-upenn), [Lewis Ghrist](https://siwel-cg.github.io/siwel.cg_websiteV1/index.html#home), and [Hongyi Ding](https://johnnyding.com/portfolio). The goal for this project 
+We are team **Circuit Nova** : [Oliver Hendrych](https://github.com/hendrych-upenn), [Lewis Ghrist](https://siwel-cg.github.io/siwel.cg_websiteV1/index.html#home), and [Hongyi Ding](https://johnnyding.com/portfolio). This project is a browser-based, WebGPU thermal simulation tool for PCB design and prototyping, built on the Walk on Stars (WoStr) algorithm. Users can import or draw PCB layouts, set boundary condition types and values, and interactively move components while the heat distribution updates in real time.
 
 # Motivation and Background
 
@@ -30,15 +31,17 @@ The original papers, as well as many extentions, can be found here: [https://roh
 |:--:|:--:|
 | ![Walk On Spheres](./WoS_SS1.png) | ![Walk On Stars](./SoStr_SS1.png) |
 
-## Interacitivity
+# Break Down
 
-- Camera movement, zooming and panning
-- Simulation zone selection, allowing users to focus on a certain area, reducing unnecessary computing 
-- Live FPS display
-- Add probes to monitor the real-time value of a position
-- Modifying properties of geometries
-  - Widths of segments
-  - Radii of footprint pads/vias
+The general pipeline involves two main compute shaders. First, we do an initial screening of our simulation domain to get just the query points within the boundaries of our geometry. This can be done once before the simulation starts and allows us to only simulate on point's that will actually result in meaning full data. These query points are then shipped to the second compute shader where the real work happens. This second compute shader handles the actuall simulation. For each query point, we send out these random walks, stepping based on the closest distance to a boundary. This closest distance is found using a BVH struture (or in this case BAH structure since we are in 2D), which drastically speeds up walk times, especially in complex boards. As explained in the WoStr method, at Neumann boundaries, this walk get reflected, picking up some flux value, and at Dirichlet boundarie's, the walk ends and returns the Dirichlet boundary value along with any accumulated flux along the walk. These results then get sent to a final fragment shader, which averages all the walk results for each query point, fits that value through a simple color ramp, and draws it to the screen along with the boundary geometry. 
+
+## Interactivity
+A unique advantage of this WoStr method, is that because it is based only on a set of initial query points, we don't need to do a global solve to get results. To take advantage of this, we implemented a simulation zone selection feature that lets users focus computation on a specific region of interest. For complex boards, or if there is a specific area you are particularly interested in, you can easily simulate just on that area in a higher resolution, without paying for the cost of simulating the entire board.
+
+The main user interaction feature is being able to select, add/delete, and move geometry as well as change the boundary types and values as needed. This allows for custom board creation or user imported boards to be edited and adjusted. The final configuration can then be exported out. 
+
+Finally, for some quality of life features, we implemented a basic camera system for navigating the board, a live FPS display for performance monitoring, a pause button for the simulation, and a selection menue for adjusting simulation resolution.
+
 
 ![Interactive Visualization demo](./Milestone_2/camera.gif)
 
@@ -59,3 +62,7 @@ The original papers, as well as many extentions, can be found here: [https://roh
 1: [https://jrainimo.com/build/2024/11/oss-thermal-simulation-of-pcbs/](https://jrainimo.com/build/2024/11/oss-thermal-simulation-of-pcbs/)
 
 2: [https://resources.altium.com/p/why-you-should-use-thermal-prototyping-instead-simulations](https://resources.altium.com/p/why-you-should-use-thermal-prototyping-instead-simulations)
+
+3: [https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/](https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/)
+
+4: [https://rohan-sawhney.github.io/mcgp-resources/](https://rohan-sawhney.github.io/mcgp-resources/)
