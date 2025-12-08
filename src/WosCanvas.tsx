@@ -706,7 +706,7 @@ export default function WosCanvas({
         <TraceWidthSlider
           value={traceWidth}
           min={0.1}
-          max={20}
+          max={10}
           step={0.1}
           onChange={updateTraceWidth}
         />
@@ -888,17 +888,46 @@ export default function WosCanvas({
             }}
           >
             {selectedPad && (
-              <div style={{ marginBottom: selectedSegment ? "8px" : "0" }}>
-                <strong>Selected Pad</strong>
-                <br />
-                Width: {selectedPad[0].size?.width.toFixed(3) ?? "N/A"}
+              <div style={{ marginBottom: selectedSegment ? "8px" : "0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <strong>Selected Pad</strong>
+                  <br />
+                  Width: {selectedPad[0].size?.width.toFixed(3) ?? "N/A"}
+                </div>
+                <Button
+                  variant="contained"
+                  color="error"
+                  size="small"
+                  style={{ width: 50, height: 32, padding: "4px 8px" }}
+                  onClick={() => {
+                    setTargetFootprints((prev) => prev.filter((fp) => fp !== selectedPad[1]));
+                    setSelectedPad(null);
+                    setReactDummyVariableRender((prev) => prev + 1);
+                  }}
+                >
+                  Delete
+                </Button>
               </div>
             )}
             {selectedSegment && (
-              <div>
-                <strong>Selected Segment</strong>
-                <br />
-                Width: {selectedSegment.width?.toFixed(3) ?? "N/A"}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <strong>Selected Segment</strong>
+                  <br />
+                  Width: {selectedSegment.width?.toFixed(3) ?? "N/A"}
+                </div>
+                <Button
+                  variant="contained"
+                  color="error"
+                  style={{ width: 50, height: 32, padding: "4px 8px" }}
+                  onClick={() => {
+                    setTargetSegments((prev) => prev.filter((seg) => seg !== selectedSegment));
+                    setSelectedSegment(null);
+                    setReactDummyVariableRender((prev) => prev + 1);
+                  }}
+                >
+                  Delete
+                </Button>
               </div>
             )}
 
@@ -993,8 +1022,8 @@ export default function WosCanvas({
                   "circle"
                 );
                 const newBoundarypad = Object.assign(newFootprintPad, {
-                  boundary_value: Math.random(),
-                  boundary_type: BoundaryType.DIRICHILET,
+                  boundaryValue: Math.random(),
+                  boundaryType: BoundaryType.DIRICHILET,
                 });
                 const newFootprint = new Footprint({
                   layer: targetLayer,
@@ -1011,6 +1040,7 @@ export default function WosCanvas({
                 });
 
                 setTargetFootprints((prev) => [...prev, boundaryFootprint]);
+                setSelectedPad([newBoundarypad, boundaryFootprint]);
                 setEditorMode("select");
                 setReactDummyVariableRender((prev) => prev + 1);
                 break;
@@ -1034,6 +1064,7 @@ export default function WosCanvas({
                     BoundaryType.NEUMANN
                   );
                   setTargetSegments((prev) => [...prev, boundarySegment]);
+                  setSelectedSegment(boundarySegment);
                   if (uiCanvasRef.current) {
                     const ctx = uiCanvasRef.current.getContext("2d");
                     if (ctx) {
