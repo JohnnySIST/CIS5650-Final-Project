@@ -62,7 +62,11 @@ A unique advantage of this WoStr method, is that because it is based only on a s
 
 The main user interaction feature is being able to select, add/delete, and move geometry as well as change the boundary types and values as needed. This allows for custom board creation or user imported boards to be edited and adjusted. The final configuration can then be exported out.
 
-The user can also choose which layer of the board they would like to modify and simulate. Modern PCB designs contain many layers, and it is important to be able to simulate any of them.
+The user can also choose which layer of the board they would like to modify and simulate. Modern PCB designs contain many layers, and it is important to be able to simulate any of them. Below is an example of this with the KiCad `kit-dev-coldfire-xilinx_5213` demo project:
+
+|                FCu Layer                 |                 In1Cu Layer                  |                 In2Cu Layer                  |
+| :--------------------------------------: | :------------------------------------------: | :------------------------------------------: |
+| ![FCu Layer](img\BigWostr_Layer-FCu.png) | ![In1Cu Layer](img\BigWostr_Layer-In1Cu.png) | ![In2Cu Layer](img\BigWostr_Layer-In2Cu.png) |
 
 Finally, for some quality of life features, we implemented a basic camera system for navigating the board, a live FPS display for performance monitoring, a pause button for the simulation, and a selection menu for adjusting simulation resolution.
 
@@ -73,6 +77,8 @@ Here is a demo video of the tool in action.
 ## KiCad Integration
 
 An important part of open source development is integrating with other tools from the ecosystem. KiCad is a very popular open source EDA (electronic design automation) tool that is used for PCB design and prototyping. Additionally, other software have capabilities to import and export KiCad PCB files, making it a common element for PCB design. As such, we chose it as our primary integration point, for both import and export of board geometry. Our tool uses a [forked](https://github.com/hendrych-upenn/kicadts) version of the [kicadts](https://github.com/tscircuit/kicadts) package to parse `.kicad_pcb` files and reexport the modified `.kicad_pcb` file. Its plaintext format makes it easy to parse and modify. Upon importing a KiCad PCB file, the tool will parse the file and extract the footprint and segment geometries, which can then be used in the simulation. The user can then modify, delete, or add geometry as needed. When the user is done, the geometry can be exported back to a KiCad PCB file.
+
+[![KiCad Integration Video](https://img.youtube.com/vi/vax0-jZ_6Vk/maxresdefault.jpg)](https://youtu.be/vax0-jZ_6Vk)
 
 # Future Work
 
