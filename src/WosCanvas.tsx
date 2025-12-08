@@ -21,6 +21,8 @@ import {
   PadLayers,
   SegmentStart,
   Layer,
+  At,
+  PadDrill,
 } from "kicadts";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
@@ -55,9 +57,20 @@ type BoundaryPadFullRef = [BoundaryPad, BoundaryFootprint];
 function getFullPosition(padFullRef: BoundaryPadFullRef) {
   const pad = padFullRef[0];
   const footprint = padFullRef[1];
+  const footprintAngle =
+    footprint.position instanceof At ? footprint.position.angle ?? 0 : 0;
+  const angle = (footprintAngle * Math.PI) / 180;
+  const padPosition = {
+    x: pad.at?.x || 0,
+    y: pad.at?.y || 0,
+  };
+  const rotatedPad = {
+    x: Math.cos(angle) * padPosition.x + Math.sin(angle) * padPosition.y,
+    y: -Math.sin(angle) * padPosition.x + Math.cos(angle) * padPosition.y,
+  };
   return {
-    x: (footprint.position?.x || 0) + (pad.at?.x || 0), // TODO: Apply rotation
-    y: (footprint.position?.y || 0) + (pad.at?.y || 0),
+    x: (footprint.position?.x || 0) + rotatedPad.x,
+    y: (footprint.position?.y || 0) + rotatedPad.y,
   };
 }
 
@@ -122,6 +135,11 @@ export default function WosCanvas({
     useState<BoundaryPadFullRef | null>(null);
   const [mouseDownSelectedSegment, setMouseDownSelectedSegment] =
     useState<BoundarySegment | null>(null);
+
+  const [chooseableLayers, setChooseableLayers] = useState<string[]>([
+    "F.Cu",
+    "B.Cu",
+  ]);
 
   const [targetLayer, setTargetLayer] = useState("B.Cu");
 
@@ -588,22 +606,28 @@ export default function WosCanvas({
       ctx.restore();
     }
     if (selectedPad) {
-      const padPos = getFullPosition(selectedPad);
-      const center = getCanvasPositionFromWorldPosition(padPos.x, padPos.y);
-      const width = scaleWorldPositionToCanvasPosition(
-        selectedPad[0].size?.width || 0,
-        0
-      ).x;
       const circleR = 0.001;
-      ctx.save();
-      ctx.strokeStyle = "rgba(0,128,255,0.6)";
-      ctx.lineWidth = width;
-      ctx.setLineDash([6, 4]);
-      ctx.beginPath();
-      ctx.moveTo(center.x + circleR, center.y);
-      ctx.arc(center.x, center.y, circleR, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+      for (const pad of selectedPad[1].fpPads) {
+        const padPos = getFullPosition([pad, selectedPad[1]]);
+        const center = getCanvasPositionFromWorldPosition(padPos.x, padPos.y);
+        const width = scaleWorldPositionToCanvasPosition(
+          pad.size?.width || 0,
+          0
+        ).x;
+        const circleR = 0.001;
+        ctx.save();
+        ctx.strokeStyle =
+          pad === selectedPad[0]
+            ? "rgba(0,128,255,0.6)"
+            : "rgba(128, 128, 0, 0.6)";
+        ctx.lineWidth = width;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(center.x + circleR, center.y);
+        ctx.arc(center.x, center.y, circleR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
   }, [
     uiCanvasRef.current,
@@ -698,6 +722,22 @@ export default function WosCanvas({
   const handleResMenuClose = (resolution: [number, number]) => {
     setSimRes([...resolution]);
     setResMenuAnchorEl(null);
+  };
+
+  const [layerMenuAnchorEl, setLayerMenuAnchorEl] =
+    React.useState<null | HTMLElement>(null);
+  const layerMenuOpen = Boolean(layerMenuAnchorEl);
+  const handleLayerMenuClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setLayerMenuAnchorEl(event.currentTarget);
+  };
+  const handleLayerMenuClose = (layer?: string) => {
+    if (layer) {
+      setTargetLayer(layer);
+      console.log("Set target layer to", layer);
+      setReactDummyVariableRender((prev) => prev + 1);
+      setReactDummyVariable2D((prev) => prev + 1);
+    }
+    setLayerMenuAnchorEl(null);
   };
 
   return (
@@ -805,6 +845,13 @@ export default function WosCanvas({
                 ) || []
               );
 
+              setChooseableLayers(
+                pcb?.layers?.definitions
+                  .map((layer) => layer.name)
+                  .filter((name) => name != null)
+                  .filter((name) => name.endsWith(".Cu")) || []
+              );
+
               console.log("Parsed KiCad PCB file:", pcb);
             }
           }}
@@ -820,6 +867,11 @@ export default function WosCanvas({
             fontSize: "0.95rem",
           }}
           onClick={() => {
+            if (!pcbDesign) return;
+            const pcbWithUpdates = Object.assign(pcbDesign, {
+              segments: targetSegments,
+              footprints: targetFootprints,
+            });
             downloadFile(
               pcbDesign?.getString() || "",
               "pcb.kicad_pcb",
@@ -867,12 +919,46 @@ export default function WosCanvas({
             720x480
           </MenuItem>
         </Menu>
+        <Button
+          id="layer-button"
+          aria-controls={layerMenuOpen ? "layer-menu" : undefined}
+          aria-haspopup="true"
+          aria-expanded={layerMenuOpen ? "true" : undefined}
+          variant="contained"
+          color="primary"
+          sx={{
+            position: "fixed",
+            right: 32,
+            top: 270,
+            fontSize: "0.95rem",
+          }}
+          onClick={handleLayerMenuClick}
+        >
+          Target Layer: {targetLayer}
+        </Button>
+        <Menu
+          id="layer-menu"
+          anchorEl={layerMenuAnchorEl}
+          open={layerMenuOpen}
+          onClose={() => handleLayerMenuClose()}
+          slotProps={{
+            list: {
+              "aria-labelledby": "layer-button",
+            },
+          }}
+        >
+          {chooseableLayers.map((layer) => (
+            <MenuItem key={layer} onClick={() => handleLayerMenuClose(layer)}>
+              {layer}
+            </MenuItem>
+          ))}
+        </Menu>
         {(selectedPad || selectedSegment) && (
           <div
             style={{
               position: "fixed",
               right: 32,
-              top: 270,
+              top: 320,
               backgroundColor: "white",
               padding: "16px",
               borderRadius: "4px",
@@ -1012,10 +1098,9 @@ export default function WosCanvas({
                     number: "1",
                     padType: "thru_hole",
                     shape: "circle",
-                    locked: false,
                     at: { x: 0, y: 0 },
                     size: { height: 1, width: 1 },
-                    width: 1,
+                    drill: new PadDrill({ diameter: 0.5 }),
                     layers: new PadLayers([targetLayer]),
                   },
                   "thru_hole",
@@ -1026,6 +1111,7 @@ export default function WosCanvas({
                   boundaryType: BoundaryType.DIRICHILET,
                 });
                 const newFootprint = new Footprint({
+                  libraryLink: "",
                   layer: targetLayer,
                   at: clickPos,
                   pads: [newFootprintPad],
@@ -1068,7 +1154,12 @@ export default function WosCanvas({
                   if (uiCanvasRef.current) {
                     const ctx = uiCanvasRef.current.getContext("2d");
                     if (ctx) {
-                      ctx.clearRect(0, 0, uiCanvasRef.current.width, uiCanvasRef.current.height);
+                      ctx.clearRect(
+                        0,
+                        0,
+                        uiCanvasRef.current.width,
+                        uiCanvasRef.current.height
+                      );
                     }
                   }
                   setAddSegmentStart(null);
@@ -1137,9 +1228,19 @@ export default function WosCanvas({
               if (uiCanvasRef.current) {
                 const ctx = uiCanvasRef.current.getContext("2d");
                 if (ctx) {
-                  ctx.clearRect(0, 0, uiCanvasRef.current.width, uiCanvasRef.current.height);
-                  const p1 = getCanvasPositionFromWorldPosition(...addSegmentStart);
-                  const p2 = getCanvasPositionFromWorldPosition(mousePos.x, mousePos.y);
+                  ctx.clearRect(
+                    0,
+                    0,
+                    uiCanvasRef.current.width,
+                    uiCanvasRef.current.height
+                  );
+                  const p1 = getCanvasPositionFromWorldPosition(
+                    ...addSegmentStart
+                  );
+                  const p2 = getCanvasPositionFromWorldPosition(
+                    mousePos.x,
+                    mousePos.y
+                  );
                   ctx.save();
                   ctx.strokeStyle = "black";
                   ctx.lineWidth = 8;
