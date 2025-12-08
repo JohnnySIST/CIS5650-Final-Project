@@ -593,22 +593,28 @@ export default function WosCanvas({
       ctx.restore();
     }
     if (selectedPad) {
-      const padPos = getFullPosition(selectedPad);
-      const center = getCanvasPositionFromWorldPosition(padPos.x, padPos.y);
-      const width = scaleWorldPositionToCanvasPosition(
-        selectedPad[0].size?.width || 0,
-        0
-      ).x;
       const circleR = 0.001;
-      ctx.save();
-      ctx.strokeStyle = "rgba(0,128,255,0.6)";
-      ctx.lineWidth = width;
-      ctx.setLineDash([6, 4]);
-      ctx.beginPath();
-      ctx.moveTo(center.x + circleR, center.y);
-      ctx.arc(center.x, center.y, circleR, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+      for (const pad of selectedPad[1].fpPads) {
+        const padPos = getFullPosition([pad, selectedPad[1]]);
+        const center = getCanvasPositionFromWorldPosition(padPos.x, padPos.y);
+        const width = scaleWorldPositionToCanvasPosition(
+          pad.size?.width || 0,
+          0
+        ).x;
+        const circleR = 0.001;
+        ctx.save();
+        ctx.strokeStyle =
+          pad === selectedPad[0]
+            ? "rgba(0,128,255,0.6)"
+            : "rgba(128, 128, 0, 0.6)";
+        ctx.lineWidth = width;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(center.x + circleR, center.y);
+        ctx.arc(center.x, center.y, circleR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
   }, [
     uiCanvasRef.current,
@@ -1099,7 +1105,12 @@ export default function WosCanvas({
                   if (uiCanvasRef.current) {
                     const ctx = uiCanvasRef.current.getContext("2d");
                     if (ctx) {
-                      ctx.clearRect(0, 0, uiCanvasRef.current.width, uiCanvasRef.current.height);
+                      ctx.clearRect(
+                        0,
+                        0,
+                        uiCanvasRef.current.width,
+                        uiCanvasRef.current.height
+                      );
                     }
                   }
                   setAddSegmentStart(null);
@@ -1168,9 +1179,19 @@ export default function WosCanvas({
               if (uiCanvasRef.current) {
                 const ctx = uiCanvasRef.current.getContext("2d");
                 if (ctx) {
-                  ctx.clearRect(0, 0, uiCanvasRef.current.width, uiCanvasRef.current.height);
-                  const p1 = getCanvasPositionFromWorldPosition(...addSegmentStart);
-                  const p2 = getCanvasPositionFromWorldPosition(mousePos.x, mousePos.y);
+                  ctx.clearRect(
+                    0,
+                    0,
+                    uiCanvasRef.current.width,
+                    uiCanvasRef.current.height
+                  );
+                  const p1 = getCanvasPositionFromWorldPosition(
+                    ...addSegmentStart
+                  );
+                  const p2 = getCanvasPositionFromWorldPosition(
+                    mousePos.x,
+                    mousePos.y
+                  );
                   ctx.save();
                   ctx.strokeStyle = "black";
                   ctx.lineWidth = 8;
