@@ -12,20 +12,15 @@ Current open source options are limited and take a large number of processing st
 
 ![./img/Process_Comparison.png](./img/Process_Comparison.png)
 
-Walk on Spheres & Walk on Stars
+## Walk on Spheres & Walk on Stars
+
 Walk on Spheres works by launching random walks from query points until they hit a boundary. Drawing inspiration from path tracing and sphere tracing, each walk contributes to a Monte Carlo estimator that converges toward the true solution of the steady-state heat equation. Because each walk is independent, the method is embarrassingly parallel, making it a perfect fit for WebGPU compute shaders.
+
 Walk on Stars is an extension to the WoS algorithm to allow for a combination of Dirichlet and Neumann boundary conditions, a feature that is needed for physically based heat simulations. The structure is the same in that it is a Monte Carlo based method using random walks from a set of query points. The radius of the sphere used for sphere tracing is only dependent on the Dirichlet boundaries. When walking to the uniformly sampled point on this sphere, if we cross a Neumann boundary, we reflect our walk about the boundary's flux direction and adjust values based on that flux. The walks continue on, only terminating when we finally hit a Dirichlet boundary. This allows for accurate sinks and sources. Again we can take advantage of GPU parallelization to make this process extremely fast.
 
-<div style="display: flex; gap: 20px; justify-content: center; margin-top: 20px;">
-  <figure style="text-align: center; margin: 0;">
-    <img src="./WoS_SS1.png" alt="Walk On Spheres" style="max-width: 100%;">
-    <figcaption><em>Walk on Spheres (Dirichlet only)</em></figcaption>
-  </figure>
-  <figure style="text-align: center; margin: 0;">
-    <img src="./SoStr_SS1.png" alt="Walk On Stars" style="max-width: 100%;">
-    <figcaption><em>Walk on Stars (Dirichlet + Neumann)</em></figcaption>
-  </figure>
-</div>
+| Walk on Spheres (Dirichlet only) | Walk on Stars (Dirichlet + Neumann) |
+|:--:|:--:|
+| ![Walk On Spheres](./WoS_SS1.png) | ![Walk On Stars](./SoStr_SS1.png) |
 
 ## Interacitivity
 
