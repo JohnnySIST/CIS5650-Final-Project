@@ -36,7 +36,7 @@ function downloadFile(content: string, fileName: string, contentType: string) {
 }
 
 type Vec2 = { x: number; y: number };
-type EditorMode = "select";
+type EditorMode = "select" | "add-circle" | "add-segment";
 
 type BoundaryInfo = {
   boundaryValue: number;
@@ -76,6 +76,9 @@ export default function WosCanvas({
   const rendererRef = useRef<Renderer | null>(null);
 
   const [pcbDesign, setPcbDesign] = useState<KicadPcb | null>(null);
+  const [addedCircles, setAddedCircles] = useState<RenderCircle[]>([]);
+  const [addedSegments, setAddedSegments] = useState<RenderSegment[]>([]);
+  const [addSegmentStart, setAddSegmentStart] = useState<[number, number] | null>(null);
 
   const targetPads: FootprintPad[] = [];
 
@@ -440,7 +443,7 @@ export default function WosCanvas({
     console.log("renderCircles", renderCircles);
     console.log("renderSegments", renderSegments);
 
-    rendererRef.current.updateGeometry(renderCircles, renderSegments);
+    rendererRef.current.updateGeometry(renderCircles.concat(addedCircles), renderSegments.concat(addedSegments));
   }
 
   useEffect(() => {
@@ -566,6 +569,37 @@ export default function WosCanvas({
           zIndex: 1000,
         }}
       >
+        <Button
+          id="add-circle-btn"
+          variant="contained"
+          color="primary"
+          sx={{
+            position: "fixed",
+            right: 170,
+            top: 70,
+            fontSize: "0.95rem",
+          }}
+          onClick={() => setEditorMode(editorMode === "add-circle" ? "select" : "add-circle")}
+        >
+          {editorMode === "add-circle" ? "Click to Add Circle" : "Add Circle"}
+        </Button>
+        <Button
+          id="add-segment-btn"
+          variant="contained"
+          color="primary"
+          sx={{
+            position: "fixed",
+            right: 170,
+            top: 120,
+            fontSize: "0.95rem",
+          }}
+          onClick={() => {
+            setEditorMode(editorMode === "add-segment" ? "select" : "add-segment");
+            setAddSegmentStart(null);
+          }}
+        >
+          {editorMode === "add-segment" ? "Click to Add Seg" : "Add Segment"}
+        </Button>
         <Button
           id="import-kicad-btn"
           variant="contained"
@@ -787,7 +821,37 @@ export default function WosCanvas({
           onClick={(e) => {
             const clickPos = getMouseWorldPosition(e.nativeEvent);
             switch (editorMode) {
-              case "select":
+              case "add-circle": {
+                const newCircle: RenderCircle = {
+                  center: [clickPos.x, clickPos.y],
+                  radius: 1,
+                  boundary_value: Math.random(),
+                  boundary_type: BoundaryType.DIRICHILET,
+                };
+                setAddedCircles((prev) => [...prev, newCircle]);
+                setEditorMode("select");
+                setReactDummyVariable((prev) => prev + 1);
+                break;
+              }
+              case "add-segment": {
+                if (!addSegmentStart) {
+                  setAddSegmentStart([clickPos.x, clickPos.y]);
+                } else {
+                  const newSegment: RenderSegment = {
+                    start: addSegmentStart,
+                    end: [clickPos.x, clickPos.y],
+                    widthRadius: 1,
+                    boundary_value: Math.random(),
+                    boundary_type: BoundaryType.NEUMANN,
+                  };
+                  setAddedSegments((prev) => [...prev, newSegment]);
+                  setAddSegmentStart(null);
+                  setEditorMode("select");
+                  setReactDummyVariable((prev) => prev + 1);
+                }
+                break;
+              }
+              case "select": {
                 if (!pcbDesign) {
                   return;
                 }
@@ -852,6 +916,7 @@ export default function WosCanvas({
                     }) ?? null
                 );
                 break;
+              }
             }
           }}
           onWheel={(e) => {
