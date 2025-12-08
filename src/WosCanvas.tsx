@@ -18,6 +18,7 @@ import {
   FootprintPad,
   Segment,
   Footprint,
+  PadLayers,
 } from "kicadts";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
@@ -56,6 +57,17 @@ function getFullPosition(padFullRef: BoundaryPadFullRef) {
     x: (footprint.position?.x || 0) + (pad.at?.x || 0), // TODO: Apply rotation
     y: (footprint.position?.y || 0) + (pad.at?.y || 0),
   };
+}
+
+function makeSegmentBoundary(
+  segment: Segment,
+  boundary_value: number,
+  boundary_type: BoundaryType
+) {
+  return Object.assign(segment, {
+    boundaryValue: boundary_value,
+    boundaryType: boundary_type,
+  });
 }
 
 export default function WosCanvas({
@@ -769,10 +781,11 @@ export default function WosCanvas({
               setPcbDesign(pcb);
               setTargetSegments(
                 pcb?.segments.map((segment) =>
-                  Object.assign(segment, {
-                    boundaryValue: Math.random(),
-                    boundaryType: BoundaryType.NEUMANN,
-                  })
+                  makeSegmentBoundary(
+                    segment,
+                    Math.random(),
+                    BoundaryType.NEUMANN
+                  )
                 ) || []
               );
 
@@ -962,14 +975,39 @@ export default function WosCanvas({
             const clickPos = getMouseWorldPosition(e.nativeEvent);
             switch (editorMode) {
               case "add-circle": {
-                const newCircle: RenderCircle = {
-                  center: [clickPos.x, clickPos.y],
-                  radius: 1,
+                const newFootprintPad = new FootprintPad(
+                  {
+                    number: "1",
+                    padType: "thru_hole",
+                    shape: "circle",
+                    locked: false,
+                    at: { x: 0, y: 0 },
+                    size: { height: 1, width: 1 },
+                    width: 1,
+                    layers: new PadLayers([targetLayer]),
+                  },
+                  "thru_hole",
+                  "circle"
+                );
+                const newBoundarypad = Object.assign(newFootprintPad, {
                   boundary_value: Math.random(),
                   boundary_type: BoundaryType.DIRICHILET,
-                };
-                // targetFootprints[0].fpPads.push(new FootprintPad({}, )); // TODO: implement
-                setTargetFootprints((prev) => [...prev]);
+                });
+                const newFootprint = new Footprint({
+                  layer: targetLayer,
+                  at: clickPos,
+                  pads: [newFootprintPad],
+                });
+                const boundaryFootprint = Object.assign(newFootprint, {
+                  fpPads: newFootprint.fpPads.map((pad) =>
+                    Object.assign(pad, {
+                      boundaryValue: Math.random(),
+                      boundaryType: BoundaryType.DIRICHILET,
+                    })
+                  ),
+                });
+
+                setTargetFootprints((prev) => [...prev, boundaryFootprint]);
                 setEditorMode("select");
                 setReactDummyVariableRender((prev) => prev + 1);
                 break;
@@ -1161,6 +1199,8 @@ export default function WosCanvas({
                     } else {
                       setSimTL(boardTL);
                       setSimSize(boardSize);
+                      setSelectedPad(null);
+                      setSelectedSegment(null);
                     }
                   } else {
                     setSimTL([minX, minY]);
