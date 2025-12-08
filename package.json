@@ -25,7 +25,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
-    "kicadts": "^0.0.22",
+    "kicadts": "github:hendrych-upenn/kicadts#main",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tweakpane": "^3.1.8",
