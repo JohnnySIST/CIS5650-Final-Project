@@ -7,6 +7,7 @@ export interface TraceWidthSliderProps {
   value: number;
   min?: number;
   max?: number;
+  step?: number;
   onChange: (value: number) => void;
   label?: string;
   style?: React.CSSProperties;
@@ -16,6 +17,7 @@ const TraceWidthSlider: React.FC<TraceWidthSliderProps> = ({
   value,
   min = 1,
   max = 50,
+  step = 1,
   onChange,
   label = "Trace Width:",
   style,
@@ -29,6 +31,7 @@ const TraceWidthSlider: React.FC<TraceWidthSliderProps> = ({
         id="trace-width-slider"
         min={min}
         max={max}
+        step={step}
         value={value}
         size="small"
         sx={{ width: 120, mx: 2 }}

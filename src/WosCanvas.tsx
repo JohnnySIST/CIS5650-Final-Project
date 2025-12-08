@@ -705,8 +705,9 @@ export default function WosCanvas({
       <div style={{ position: "absolute", top: 24, right: 12, zIndex: 2000 }}>
         <TraceWidthSlider
           value={traceWidth}
-          min={1}
-          max={50}
+          min={0.1}
+          max={20}
+          step={0.1}
           onChange={updateTraceWidth}
         />
       </div>
@@ -1033,6 +1034,12 @@ export default function WosCanvas({
                     BoundaryType.NEUMANN
                   );
                   setTargetSegments((prev) => [...prev, boundarySegment]);
+                  if (uiCanvasRef.current) {
+                    const ctx = uiCanvasRef.current.getContext("2d");
+                    if (ctx) {
+                      ctx.clearRect(0, 0, uiCanvasRef.current.width, uiCanvasRef.current.height);
+                    }
+                  }
                   setAddSegmentStart(null);
                   setEditorMode("select");
                   setReactDummyVariableRender((prev) => prev + 1);
@@ -1093,6 +1100,26 @@ export default function WosCanvas({
                 prevViewTL[0] - worldMove.x,
                 prevViewTL[1] - worldMove.y,
               ]);
+            }
+            if (editorMode === "add-segment" && addSegmentStart) {
+              const mousePos = getMouseWorldPosition(e.nativeEvent);
+              if (uiCanvasRef.current) {
+                const ctx = uiCanvasRef.current.getContext("2d");
+                if (ctx) {
+                  ctx.clearRect(0, 0, uiCanvasRef.current.width, uiCanvasRef.current.height);
+                  const p1 = getCanvasPositionFromWorldPosition(...addSegmentStart);
+                  const p2 = getCanvasPositionFromWorldPosition(mousePos.x, mousePos.y);
+                  ctx.save();
+                  ctx.strokeStyle = "black";
+                  ctx.lineWidth = 8;
+                  ctx.setLineDash([]);
+                  ctx.beginPath();
+                  ctx.moveTo(p1.x, p1.y);
+                  ctx.lineTo(p2.x, p2.y);
+                  ctx.stroke();
+                  ctx.restore();
+                }
+              }
             }
             if (isSelecting) {
               const newSelectionEnd = getMouseWorldPosition(e.nativeEvent);
