@@ -22,6 +22,7 @@ import {
   SegmentStart,
   Layer,
   At,
+  PadDrill,
 } from "kicadts";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
@@ -56,7 +57,6 @@ type BoundaryPadFullRef = [BoundaryPad, BoundaryFootprint];
 function getFullPosition(padFullRef: BoundaryPadFullRef) {
   const pad = padFullRef[0];
   const footprint = padFullRef[1];
-  const padAngle = pad.at?.angle ?? 0;
   const footprintAngle =
     footprint.position instanceof At ? footprint.position.angle ?? 0 : 0;
   const angle = (footprintAngle * Math.PI) / 180;
@@ -867,6 +867,11 @@ export default function WosCanvas({
             fontSize: "0.95rem",
           }}
           onClick={() => {
+            if (!pcbDesign) return;
+            const pcbWithUpdates = Object.assign(pcbDesign, {
+              segments: targetSegments,
+              footprints: targetFootprints,
+            });
             downloadFile(
               pcbDesign?.getString() || "",
               "pcb.kicad_pcb",
@@ -1064,10 +1069,9 @@ export default function WosCanvas({
                     number: "1",
                     padType: "thru_hole",
                     shape: "circle",
-                    locked: false,
                     at: { x: 0, y: 0 },
                     size: { height: 1, width: 1 },
-                    width: 1,
+                    drill: new PadDrill({ diameter: 0.5 }),
                     layers: new PadLayers([targetLayer]),
                   },
                   "thru_hole",
@@ -1078,6 +1082,7 @@ export default function WosCanvas({
                   boundary_type: BoundaryType.DIRICHILET,
                 });
                 const newFootprint = new Footprint({
+                  libraryLink: "",
                   layer: targetLayer,
                   at: clickPos,
                   pads: [newFootprintPad],
