@@ -38,6 +38,7 @@ struct BVHNode {
 @group(0) @binding(6) var<storage> segments: array<Segment>;
 
 @group(1) @binding(0) var<storage, read_write> uv_list: array<vec2f>;
+@group(1) @binding(1) var<storage, read_write> onBoundaryList: array<f32>;
 
 @group(2) @binding(0) var<storage> bvhDirGeo: array<Geom>;
 @group(2) @binding(1) var<storage> bvhDirNodes: array<BVHNode>;
@@ -263,8 +264,8 @@ fn distanceToBoundary(worldPos: vec2f) -> f32 {
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) id: vec3u) {
-    // let coords = vec2i(id.xy);
-
+    //let coords = vec2i(id.xy);
+    
     if id.x >= simRes.x || id.y >= simRes.y {
         return;
     }
@@ -280,6 +281,17 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     if (dist < 0.0) {
         uv = vec2f(-1.0, -1.0);
     }
+
     uv_list[index] = uv;
+
+    let boardUV = vec2f(id.xy) / vec2f(simRes);
+    let boardWorldPos = boardUV * boardSize + boardTL;
+    let boardDist = abs(distanceToBoundary(boardWorldPos));
+    
+    if abs(boardDist) < 0.1 {
+        onBoundaryList[index] = 0.0;
+    } else {
+        onBoundaryList[index] = 1.0;
+    }
 }
   

@@ -9,7 +9,6 @@ import { BoundaryType, Circle, Segment } from "./renderTypes";
 interface Geom {
   type: number; // 0 indicates circle, 1 indicates segment
   index: number;
-  globalIndex: number;
 }
 
 interface BVHNode {
@@ -347,8 +346,8 @@ function bvhTreeGPU(
 // }
 
 export function buildBVH(
-  circles: { circle: Circle; index: number }[],
-  segments: { segment: Segment; index: number }[],
+  circles: Circle[],
+  segments: Segment[],
   leafSize: number = 8
 ): BVH {
   const geoms: Geom[] = [];
@@ -358,30 +357,22 @@ export function buildBVH(
     geoms.push({
       type: 0,
       index: i,
-      globalIndex: circle.index,
     });
 
-    centroids.push([circle.circle.center[0], circle.circle.center[1]]);
+    centroids.push([circle.center[0], circle.center[1]]);
   });
 
   segments.forEach((segment, i) => {
     geoms.push({
       type: 1,
       index: i,
-      globalIndex: segment.index,
     });
-    const centerX = (segment.segment.start[0] + segment.segment.end[0]) / 2;
-    const centerY = (segment.segment.start[1] + segment.segment.end[1]) / 2;
+    const centerX = (segment.start[0] + segment.end[0]) / 2;
+    const centerY = (segment.start[1] + segment.end[1]) / 2;
     centroids.push([centerX, centerY]);
   });
 
-  const rootNode = subdivide(
-    geoms,
-    centroids,
-    circles.map((c) => c.circle),
-    segments.map((s) => s.segment),
-    leafSize
-  );
+  const rootNode = subdivide(geoms, centroids, circles, segments, leafSize);
 
   const flatNodes: BVHNode[] = [];
   const flatGeoms: Geom[] = [];
@@ -390,17 +381,17 @@ export function buildBVH(
   const circleData = new Float32Array(circles.length * 4);
   for (let i = 0; i < circles.length; i++) {
     const offset = i * 4;
-    circleData[offset + 0] = circles[i].circle.center[0];
-    circleData[offset + 1] = circles[i].circle.center[1];
-    circleData[offset + 2] = circles[i].circle.radius;
-    circleData[offset + 3] = circles[i].circle.boundary_value;
+    circleData[offset + 0] = circles[i].center[0];
+    circleData[offset + 1] = circles[i].center[1];
+    circleData[offset + 2] = circles[i].radius;
+    circleData[offset + 3] = circles[i].boundary_value;
   }
 
   const geomsData = new Uint32Array(flatGeoms.length * 2);
   for (let i = 0; i < flatGeoms.length; i++) {
     const offset = i * 2;
     geomsData[offset + 0] = flatGeoms[i].type;
-    geomsData[offset + 1] = flatGeoms[i].globalIndex;
+    geomsData[offset + 1] = flatGeoms[i].index;
   }
 
   const nodeData = new Float32Array(flatNodes.length * 12);
@@ -451,6 +442,7 @@ export class Renderer {
 
   private walkCountBuffer: GPUBuffer;
   private wosValuesBuffer: GPUBuffer;
+  private onBoundaryBuffer: GPUBuffer;
   private uvBuffer: GPUBuffer;
   private segmentGeomBuffer: GPUBuffer;
 
@@ -570,6 +562,10 @@ export class Renderer {
     // UV BUFFERS
 
     this.createUVBuffer();
+
+    // DRAW BOUNDARY BUFFER
+
+    this.createOnBoundaryBuffer();
 
     // WOS BUFFERS
 
@@ -700,7 +696,6 @@ export class Renderer {
       if (circles[i].boundary_value < this.minMaxBvals[0]) {
         this.minMaxBvals[0] = circles[i].boundary_value;
       }
-
       if (circles[i].boundary_value > this.minMaxBvals[1]) {
         this.minMaxBvals[1] = circles[i].boundary_value;
       }
@@ -752,19 +747,7 @@ export class Renderer {
 
     // BVH BUFFERS
     // DIRICHILET
-
-    const dir_circles = circles
-      .map((circle, i) => ({ circle: circle, index: i }))
-      .filter(
-        (circle) => circle.circle.boundary_type === BoundaryType.DIRICHILET
-      );
-    const dir_segments = segments
-      .map((segment, i) => ({ segment: segment, index: i }))
-      .filter(
-        (segment) => segment.segment.boundary_type === BoundaryType.DIRICHILET
-      );
-
-    const BVH_Dir = buildBVH(dir_circles, dir_segments, 8); // CHANGE LATER
+    const BVH_Dir = buildBVH(circles, [], 8); // CHANGE LATERt
     this.bvhDirGeomsBuffer?.destroy();
     this.bvhDirGeomsBuffer = device.createBuffer({
       label: "bvh Dir geoms buffer",
@@ -785,16 +768,7 @@ export class Renderer {
     device.queue.writeBuffer(this.bvhDirNodeBuffer, 0, BVH_Dir.nodes);
 
     // NEUMANN
-    const neu_circles = circles
-      .map((circle, i) => ({ circle: circle, index: i }))
-      .filter((circle) => circle.circle.boundary_type === BoundaryType.NEUMANN);
-    const neu_segments = segments
-      .map((segment, i) => ({ segment: segment, index: i }))
-      .filter(
-        (segment) => segment.segment.boundary_type === BoundaryType.NEUMANN
-      );
-
-    const BVH_Neu = buildBVH(neu_circles, neu_segments, 8); // CHANGE LATER
+    const BVH_Neu = buildBVH([], segments, 8); // CHANGE LATER
     this.bvhNeuGeomsBuffer?.destroy();
     this.bvhNeuGeomsBuffer = device.createBuffer({
       label: "bvh Neu geoms buffer",
@@ -900,9 +874,12 @@ export class Renderer {
     });
 
     this.uvBindGroup_uvPre = this.device.createBindGroup({
-      label: "uv bg compute",
+      label: "uv bg compute uvPre",
       layout: this.uvPre_Pipeline.getBindGroupLayout(1),
-      entries: [{ binding: 0, resource: { buffer: this.uvBuffer } }],
+      entries: [
+        { binding: 0, resource: { buffer: this.uvBuffer } },
+        { binding: 1, resource: { buffer: this.onBoundaryBuffer } },
+      ],
     });
 
     this.bvhBindGroup_uvPre = this.device.createBindGroup({
@@ -923,6 +900,19 @@ export class Renderer {
     this.uvBuffer = this.device.createBuffer({
       label: "uv buffer",
       size: align(this.simRes[0] * this.simRes[1] * 8, 16),
+      usage:
+        GPUBufferUsage.STORAGE |
+        GPUBufferUsage.COPY_DST |
+        GPUBufferUsage.COPY_SRC,
+    });
+  }
+
+  private createOnBoundaryBuffer() {
+    // THIS STORES UVs ON SCREEN FOR QUEERY POINTS
+    this.onBoundaryBuffer?.destroy();
+    this.onBoundaryBuffer = this.device.createBuffer({
+      label: "uv buffer",
+      size: align(this.simRes[0] * this.simRes[1] * 4, 16),
       usage:
         GPUBufferUsage.STORAGE |
         GPUBufferUsage.COPY_DST |
@@ -982,11 +972,11 @@ export class Renderer {
     });
 
     this.uvBindGroup_compute = device.createBindGroup({
-      label: "uv bg compute",
+      label: "uv bg compute wos",
       layout: this.wos_pipeline.getBindGroupLayout(1),
       entries: [
         { binding: 0, resource: { buffer: this.uvBuffer } },
-        { binding: 1, resource: { buffer: this.wosValuesBuffer } },
+        { binding: 1, resource: { buffer: this.wosValuesBuffer } }
       ],
     });
 
@@ -1101,6 +1091,7 @@ export class Renderer {
       entries: [
         // { binding: 0, resource: { buffer: this.uvBuffer } },
         { binding: 0, resource: { buffer: this.wosValuesBuffer } },
+        { binding: 1, resource: { buffer: this.onBoundaryBuffer } }
       ],
     });
   }
@@ -1147,6 +1138,12 @@ export class Renderer {
       new Float32Array(this.wosValuesBuffer.size / 4).fill(0)
     );
     this.uvPreprocessNeeded = true;
+
+    console.log("SIM REZ: " + this.simRes);
+    console.log("SIM TL: " + this.simTL);
+    console.log("SIM SIZE: " + this.simSize);
+    console.log("BOARD SIZE: " + this.boardSize);
+    console.log("BOARD TL: " + this.boardTL);
     requestAnimationFrame(() => this.frame(this.simUpdateId));
   }
 
